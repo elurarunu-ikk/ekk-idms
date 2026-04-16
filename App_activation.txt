@@ -1,0 +1,59 @@
+1. Install route folder
+pip install fastapi uvicorn sqlalchemy psycopg2-binary pydantic python-jose passlib python-multipart httpx celery redis
+to ensure all are installed
+pip show fastapi uvicorn sqlalchemy psycopg2-binary pydantic python-jose passlib httpx celery redis python-dotenv
+2. start app
+PS D:\EKK_IDMS_Project\ekk-idms\services\api> uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+
+3. Mobile emulator 
+
+cd D:\EKK_IDMS_Project
+npx create-expo-app ekk-mobile --template blank
+cd ekk-mobile
+npx expo install expo-location expo-camera expo-av expo-sqlite expo-file-system expo-image-picker expo-secure-store expo-constants
+npm install @react-navigation/native @react-navigation/native-stack @react-navigation/bottom-tabs react-native-screens react-native-safe-area-context axios zustand dayjs
+npx expo start
+
+cd D:\EKK_IDMS_Project\ekk-mobile
+npx expo install react-dom react-native-web @expo/metro-runtime
+
+cd D:\EKK_IDMS_Project\ekk-mobile
+npx expo install @expo/metro-runtime
+
+to start app
+D:\EKK_IDMS_Project\ekk-mobile> 
+npx expo start --web
+
+login 
+Email: admin@ekk.in
+Password: changeme123
+
+To find or locate a file 
+powershell
+PS C:\Users\Arun Prakash> Get-ChildItem -Path "D:\EKK_IDMS_Project" -Recurse -Filter "capture.py"
+Command prompt
+dir D:\EKK_IDMS_Project\capture.py /s
+
+To find or specific line in a file 
+    PS C:\Users\Arun Prakash> Select-String -Path "D:\EKK_IDMS_Project\**\*.js" -Pattern 'Tab.Screen name="Capture"'
+    CORS
+
+create APK file 
+Step 1
+Install EAS CLI (if not already installed):
+
+Open a terminal in your project root (ekk-mobile).
+Run: npm install -g eas-cli
+This installs the EAS command-line tool globally.
+D:\EKK_IDMS_Project\ekk-mobile> npm install -g eas-cli
+
+step 2
+eas login
+eas build --platform android --profile production
+
+login
+arunprakashm or elurarunu@gmail.com
+PrithuPranee_15
+
+D:\EKK_IDMS_Project\ekk-mobile>eas build:configure
