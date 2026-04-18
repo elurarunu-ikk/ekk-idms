@@ -4,11 +4,15 @@ import {
   StyleSheet, Alert, ActivityIndicator, Image, Platform,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useNavigation } from '@react-navigation/native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { parseVoiceTranscript, formatChainage } from '../utils/voiceParser';
 import { useMediaCapture } from '../hooks/useMediaCapture';
 import { useNetworkMode } from '../hooks/useNetworkMode';
 import { enqueueEntry } from '../utils/offlineQueue';
+import { formatLocationText } from '../utils/gpsOverlay';
+import { startAudioRecording, stopAudioRecording, uploadAndTranscribe } from '../utils/whisperVoice';
+import { logout } from '../services/auth';
 import api from '../services/api';
 import { STAGES, ACTIVITY_CODES, ROAD_SIDES } from '../constants/data';
 
@@ -23,7 +27,13 @@ function toDateString(date) {
   return `${y}-${m}-${d}`;
 }
 
+function getPhotoGpsPreview(photo) {
+  if (!photo?.locationData) return 'No GPS data';
+  return formatLocationText(photo.locationData);
+}
+
 export default function CaptureScreen() {
+  const navigation = useNavigation();
 
   const [form, setForm] = useState({
     project_id:      PROJECT_ID,
@@ -46,7 +56,9 @@ export default function CaptureScreen() {
   const [loading,    setLoading]    = useState(false);
   const [recording,  setRecording]  = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [parsing,    setParsing]    = useState(false);
+  const [parsing,       setParsing]       = useState(false);
+  const [whisperStatus,  setWhisperStatus]  = useState('idle');   // idle | uploading | done | error
+  const [transcriptSrc,  setTranscriptSrc]  = useState('local');  // local | ai
   const [waypoints,  setWaypoints]  = useState([]);
   const [lastSaved,  setLastSaved]  = useState(null);
 
@@ -117,9 +129,15 @@ export default function CaptureScreen() {
   }
 
   // ── Voice ─────────────────────────────────────────────────────────────────
-  function handleStartRecording() {
+  async function handleStartRecording() {
     setTranscript('');
+    setTranscriptSrc('local');
+    setWhisperStatus('idle');
     setRecording(true);
+
+    // Start expo-av parallel recording (for Whisper upload on stop)
+    await startAudioRecording();
+
     if (typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
       const SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
       const rec = new SR();
@@ -146,11 +164,31 @@ export default function CaptureScreen() {
     }).catch(e => { setRecording(false); console.log('Permission error:', e); });
   }
 
-  function handleStopRecording() {
+  async function handleStopRecording() {
     global._ekk_rec_active = false;
     if (global._ekk_rec) { global._ekk_rec.stop(); global._ekk_rec = null; }
     else ExpoSpeechRecognitionModule.stop();
     setRecording(false);
+
+    // Stop expo-av and upload to Whisper if online
+    const audioUri = await stopAudioRecording();
+    if (audioUri && !isOffline) {
+      setWhisperStatus('uploading');
+      try {
+        const result = await uploadAndTranscribe(audioUri);
+        if (result?.transcript) {
+          setTranscript(result.transcript);
+          setTranscriptSrc('ai');
+        }
+        if (result?.parsed) {
+          applyParsed(result.parsed);
+        }
+        setWhisperStatus('done');
+      } catch (e) {
+        console.log('[Voice] Whisper upload failed (local STT kept):', e.message);
+        setWhisperStatus('error');
+      }
+    }
   }
 
   // ── GPS ───────────────────────────────────────────────────────────────────
@@ -288,13 +326,35 @@ export default function CaptureScreen() {
 
   const isToday = toDateString(entryDate) === toDateString(new Date());
 
+  function handleLogout() {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out', style: 'destructive',
+          onPress: async () => {
+            await logout();
+            navigation.replace('Login');
+          },
+        },
+      ]
+    );
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
 
       <View style={styles.header}>
-        <Text style={styles.title}>Field Capture</Text>
-        <Text style={styles.subtitle}>M1 · End of Day Entry · Project 613</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>Field Capture</Text>
+          <Text style={styles.subtitle}>M1 · End of Day Entry · Project 613</Text>
+        </View>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <Text style={styles.logoutText}>🚪</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Offline banner */}
@@ -368,9 +428,23 @@ export default function CaptureScreen() {
           {recording && <Text style={styles.voiceHint}>Listening... English / தமிழ் / हिंदी</Text>}
         </TouchableOpacity>
 
-        {transcript !== '' && (
+        {(transcript !== '' || whisperStatus === 'uploading') && (
           <View style={styles.transcriptBox}>
-            <Text style={styles.transcriptLabel}>Heard</Text>
+            <View style={styles.transcriptHeader}>
+              <Text style={styles.transcriptLabel}>Heard</Text>
+              <View style={[styles.sourceBadge, transcriptSrc === 'ai' ? styles.sourceBadgeAI : styles.sourceBadgeLocal]}>
+                <Text style={styles.sourceBadgeText}>{transcriptSrc === 'ai' ? '✨ AI Enhanced' : '📱 Local STT'}</Text>
+              </View>
+            </View>
+            {whisperStatus === 'uploading' && (
+              <View style={styles.whisperRow}>
+                <ActivityIndicator size="small" color="#7c3aed" />
+                <Text style={styles.whisperText}>Enhancing with AI (Tamil / Hindi / English)...</Text>
+              </View>
+            )}
+            {whisperStatus === 'error' && (
+              <Text style={styles.whisperError}>⚠ AI enhance failed — local result kept</Text>
+            )}
             <Text style={styles.transcriptText}>{transcript}</Text>
             <Text style={[styles.transcriptLabel, { marginTop: 8 }]}>Parsed into form</Text>
             <Text style={styles.transcriptText}>
@@ -448,6 +522,12 @@ export default function CaptureScreen() {
                   <TouchableOpacity onPress={() => removePhoto(i)} style={styles.thumbRemove}>
                     <Text style={styles.thumbRemoveText}>✕</Text>
                   </TouchableOpacity>
+                </View>
+                <View style={styles.gpsPreviewCard}>
+                  <Text style={styles.gpsPreviewLabel}>Stamp Preview</Text>
+                  <Text style={styles.gpsPreviewText} numberOfLines={4}>
+                    {getPhotoGpsPreview(p)}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -572,7 +652,8 @@ export default function CaptureScreen() {
 
 const styles = StyleSheet.create({
   container:        { flex: 1, backgroundColor: '#f5f5f0' },
-  header:           { backgroundColor: '#1a1a1a', padding: 20, paddingTop: 52 },
+  header:           { backgroundColor: '#1a1a1a', padding: 20, paddingTop: 52, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  headerContent:    { flex: 1 },
   title:            { fontSize: 22, fontWeight: '700', color: '#fff' },
   subtitle:         { fontSize: 12, color: '#777', marginTop: 2 },
   offlineBanner:    { backgroundColor: '#1a1a1a', padding: 10, paddingHorizontal: 16 },
@@ -595,8 +676,16 @@ const styles = StyleSheet.create({
   voiceBtnText:     { color: '#fff', fontSize: 15, fontWeight: '600' },
   voiceHint:        { color: '#aaa', fontSize: 12, marginTop: 6 },
   transcriptBox:    { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginTop: 10, borderLeftWidth: 3, borderLeftColor: '#1a1a1a' },
+  transcriptHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   transcriptLabel:  { fontSize: 10, color: '#888', textTransform: 'uppercase', marginBottom: 4 },
   transcriptText:   { fontSize: 13, color: '#333', lineHeight: 20 },
+  sourceBadge:      { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  sourceBadgeLocal: { backgroundColor: '#f0f0f0' },
+  sourceBadgeAI:    { backgroundColor: '#ede9fe' },
+  sourceBadgeText:  { fontSize: 10, fontWeight: '600', color: '#555' },
+  whisperRow:       { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  whisperText:      { fontSize: 11, color: '#7c3aed', fontWeight: '500', flex: 1 },
+  whisperError:     { fontSize: 11, color: '#dc2626', marginBottom: 6 },
   // GPS
   pinBtn:           { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#e0e0e0' },
   pinIcon:          { fontSize: 22 },
@@ -619,6 +708,9 @@ const styles = StyleSheet.create({
   thumbSize:        { fontSize: 10, color: '#aaa' },
   thumbRemove:      { backgroundColor: '#fee2e2', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
   thumbRemoveText:  { fontSize: 11, color: '#dc2626', fontWeight: '700' },
+  gpsPreviewCard:   { width: 140, marginTop: 6, backgroundColor: '#111827', borderRadius: 8, padding: 6 },
+  gpsPreviewLabel:  { fontSize: 9, color: '#cbd5e1', textTransform: 'uppercase', marginBottom: 2 },
+  gpsPreviewText:   { fontSize: 10, color: '#f9fafb', lineHeight: 13 },
   videoChip:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1, borderColor: '#e0e0e0' },
   videoChipIcon:    { fontSize: 22 },
   videoChipName:    { fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
@@ -656,4 +748,6 @@ const styles = StyleSheet.create({
   submitText:       { color: '#fff', fontSize: 16, fontWeight: '600' },
   clearBtn:         { alignItems: 'center', marginBottom: 8 },
   clearText:        { color: '#aaa', fontSize: 13 },
+  logoutBtn:        { padding: 12, borderRadius: 8, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center', marginLeft: 12 },
+  logoutText:       { fontSize: 18 },
 });

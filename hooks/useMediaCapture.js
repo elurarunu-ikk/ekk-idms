@@ -1,6 +1,7 @@
 // ekk-mobile/hooks/useMediaCapture.js
 // Handles photo/video capture, client-side compression, and background upload.
 // Upload happens AFTER form submit — never blocks the user.
+// Photos include GPS location, address, and timestamp overlay.
 
 import { useState, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
@@ -10,6 +11,7 @@ import { getInfoAsync } from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import api from '../services/api';
 import { getMode, loadRetryQueue, saveRetryQueue } from '../utils/offlineQueue';
+import { capturePhotoWithGPSOverlay } from '../utils/gpsOverlay';
 
 // ── Limits ────────────────────────────────────────────────────────────────────
 const MAX_PHOTOS       = 3;
@@ -92,10 +94,14 @@ export function useMediaCapture() {
       { compress: PHOTO_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
     );
 
+    // Add GPS location, address, and timestamp overlay
+    console.log('[media] Adding GPS overlay to photo...');
+    const { imageUri: withOverlay, locationData } = await capturePhotoWithGPSOverlay(compressed.uri);
+
     let sizeMb = 0;
     if (Platform.OS !== 'web') {
       try {
-        const info = await getInfoAsync(compressed.uri, { size: true });
+        const info = await getInfoAsync(withOverlay, { size: true });
         sizeMb = (info.size || 0) / (1024 * 1024);
       } catch (e) {
         console.log('[media] Could not get file size:', e.message);
@@ -103,9 +109,12 @@ export function useMediaCapture() {
     }
     const name = `photo_${Date.now()}.jpg`;
 
-    console.log(`[media] Photo captured: ${sizeMb.toFixed(2)}MB after compression`);
+    console.log(`[media] Photo captured: ${sizeMb.toFixed(2)}MB after compression and overlay`);
+    if (locationData) {
+      console.log(`[media] GPS: ${locationData.coords.latitude.toFixed(4)}, ${locationData.coords.longitude.toFixed(4)}`);
+    }
 
-    setPhotos(prev => [...prev, { uri: compressed.uri, type: 'photo', name, sizeMb }]);
+    setPhotos(prev => [...prev, { uri: withOverlay, type: 'photo', name, sizeMb, locationData }]);
   }
 
   // ── Capture video ────────────────────────────────────────────────────────

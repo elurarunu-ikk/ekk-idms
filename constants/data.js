@@ -20,6 +20,6 @@ export const ACTIVITY_CODES = [
   { code: 'MISC', label: 'Miscellaneous' },
 ];
 
-export const ROAD_SIDES = ['BS', 'FS', 'Both', 'Median'];
+export const ROAD_SIDES = ['LHS', 'RHS', 'Both', 'Median'];
 
 export const CONTRACTORS = ['Self', 'Subcontractor A', 'Subcontractor B'];

@@ -5,14 +5,24 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Alert, ActivityIndicator, Switch, TextInput, Modal,
 } from 'react-native';
-import { Platform } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { Platform, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { getInfoAsync } from 'expo-file-system/legacy';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useNetworkMode } from '../hooks/useNetworkMode';
+import { logout } from '../services/auth';
 import {
   loadQueue, removeFromQueue, markFailed,
   updateQueueEntry,
 } from '../utils/offlineQueue';
 import api from '../services/api';
+import { STAGES, ACTIVITY_CODES, ROAD_SIDES } from '../constants/data';
+
+const EDIT_MAX_PHOTOS = 3;
+const EDIT_MAX_VIDEOS = 1;
+const EDIT_MAX_FILES = 2;
 
 function inferMediaType(mediaItem = {}) {
   const type = String(mediaItem.type || '').toLowerCase();
@@ -36,6 +46,26 @@ function inferMimeType(mediaItem = {}, mediaType) {
 }
 
 export default function SettingsScreen() {
+  const navigation = useNavigation();
+
+  // ── Chainage helpers ──────────────────────────────────────────────────────
+  function floatToChainageFmt(val) {
+    if (val === null || val === undefined || val === '') return '';
+    const n = parseFloat(val);
+    if (isNaN(n)) return String(val);
+    const km = Math.floor(n);
+    const m  = Math.round((n - km) * 1000);
+    return `${km}+${String(m).padStart(3, '0')}`;
+  }
+
+  function chainageFmtToFloat(val) {
+    if (!val) return null;
+    const m = String(val).match(/^(\d+)\+(\d+)$/);
+    if (m) return parseFloat(m[1]) + parseFloat(m[2]) / 1000;
+    const n = parseFloat(val);
+    return isNaN(n) ? null : n;
+  }
+
   const {
     isConnected, manualMode, effectiveMode,
     offlineReason, toggleMode,
@@ -46,6 +76,11 @@ export default function SettingsScreen() {
   const [syncLog,    setSyncLog]    = useState([]);
   const [editItem,   setEditItem]   = useState(null);   // entry being edited
   const [editForm,   setEditForm]   = useState({});     // editable fields
+  const [editDate,        setEditDate]        = useState(new Date());
+  const [showEditDatePick,setShowEditDatePick] = useState(false);
+  const [editMediaItems,  setEditMediaItems]  = useState([]);
+  const [editQuantity,    setEditQuantity]    = useState(null);
+  const [mediaBusy,       setMediaBusy]       = useState(false);
 
   useFocusEffect(useCallback(() => {
     refreshQueue();
@@ -195,41 +230,213 @@ export default function SettingsScreen() {
 
   // ── Edit ───────────────────────────────────────────────────────────────────
   function openEdit(item) {
+    const cf = floatToChainageFmt(item.payload.chainage_from);
+    const ct = floatToChainageFmt(item.payload.chainage_to);
+    const f  = chainageFmtToFloat(cf);
+    const t  = chainageFmtToFloat(ct);
+    setEditQuantity(f !== null && t !== null && t > f ? Math.round((t - f) * 1000) : null);
+    // Parse stored date string → Date object
+    const dateStr = item.payload.entry_date || '';
+    const parsedDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+    setEditDate(isNaN(parsedDate) ? new Date() : parsedDate);
+    setEditMediaItems(item.mediaItems ? [...item.mediaItems] : []);
     setEditItem(item);
     setEditForm({
       activity_code:   item.payload.activity_code   || '',
       stage:           item.payload.stage           || '',
-      chainage_from:   String(item.payload.chainage_from || ''),
-      chainage_to:     String(item.payload.chainage_to   || ''),
+      chainage_from:   cf,
+      chainage_to:     ct,
       road_side:       item.payload.road_side       || '',
       contractor_name: item.payload.contractor_name || 'Self',
       rfi_number:      item.payload.rfi_number      ? String(item.payload.rfi_number) : '',
       layer_section:   item.payload.layer_section   || '',
       remarks:         item.payload.remarks         || '',
-      entry_date:      item.payload.entry_date      || '',
     });
   }
 
   async function saveEdit() {
     if (!editItem) return;
+    const cf = chainageFmtToFloat(editForm.chainage_from);
+    const ct = chainageFmtToFloat(editForm.chainage_to);
+    const y  = editDate.getFullYear();
+    const mo = String(editDate.getMonth() + 1).padStart(2, '0');
+    const d  = String(editDate.getDate()).padStart(2, '0');
     const updated = {
       ...editItem.payload,
-      activity_code:   editForm.activity_code.toUpperCase(),
-      stage:           editForm.stage.toUpperCase(),
-      chainage_from:   parseFloat(editForm.chainage_from),
-      chainage_to:     parseFloat(editForm.chainage_to),
+      activity_code:   editForm.activity_code || editItem.payload.activity_code,
+      stage:           editForm.stage         || editItem.payload.stage,
+      chainage_from:   cf   ?? editItem.payload.chainage_from,
+      chainage_to:     ct   ?? editItem.payload.chainage_to,
       road_side:       editForm.road_side       || null,
       contractor_name: editForm.contractor_name || 'Self',
       rfi_number:      editForm.rfi_number ? parseInt(editForm.rfi_number) : null,
       layer_section:   editForm.layer_section   || null,
       remarks:         editForm.remarks         || null,
-      entry_date:      editForm.entry_date,
-      quantity_lm:     Math.round((parseFloat(editForm.chainage_to) - parseFloat(editForm.chainage_from)) * 1000),
+      entry_date:      `${y}-${mo}-${d}`,
+      quantity_lm:     cf !== null && ct !== null && ct > cf ? Math.round((ct - cf) * 1000) : editItem.payload.quantity_lm,
     };
-    await updateQueueEntry(editItem.localId, updated);
+    await updateQueueEntry(editItem.localId, updated, editMediaItems);
     setEditItem(null);
     await refreshQueue();
     Alert.alert('Saved', 'Entry updated in queue.');
+  }
+
+  function onEditChainageChange(key, val) {
+    setEditForm(prev => {
+      const next = { ...prev, [key]: val };
+      const f = chainageFmtToFloat(next.chainage_from);
+      const t = chainageFmtToFloat(next.chainage_to);
+      setEditQuantity(f !== null && t !== null && t > f ? Math.round((t - f) * 1000) : null);
+      return next;
+    });
+  }
+
+  function getEditMediaCounts() {
+    const photos = editMediaItems.filter(m => inferMediaType(m) === 'photo').length;
+    const videos = editMediaItems.filter(m => inferMediaType(m) === 'video').length;
+    const files = editMediaItems.filter(m => m.source === 'file').length;
+    return { photos, videos, files };
+  }
+
+  function removeEditMediaAt(index) {
+    setEditMediaItems(prev => prev.filter((_, i) => i !== index));
+  }
+
+  async function ensureCameraPermission() {
+    const res = await ImagePicker.requestCameraPermissionsAsync();
+    if (res.status !== 'granted') {
+      Alert.alert('Permission required', 'Camera access is needed to capture media.');
+      return false;
+    }
+    return true;
+  }
+
+  async function captureEditPhoto() {
+    const { photos } = getEditMediaCounts();
+    if (photos >= EDIT_MAX_PHOTOS) {
+      Alert.alert('Limit reached', `Maximum ${EDIT_MAX_PHOTOS} photos per entry.`);
+      return;
+    }
+    const ok = await ensureCameraPermission();
+    if (!ok) return;
+
+    setMediaBusy(true);
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      let sizeMb = 0;
+      if (Platform.OS !== 'web') {
+        const info = await getInfoAsync(asset.uri, { size: true });
+        sizeMb = (info.size || 0) / (1024 * 1024);
+      }
+      setEditMediaItems(prev => ([
+        ...prev,
+        {
+          uri: asset.uri,
+          type: 'photo',
+          source: 'camera',
+          mimeType: asset.mimeType || 'image/jpeg',
+          name: `photo_${Date.now()}.jpg`,
+          sizeMb,
+        },
+      ]));
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  async function captureEditVideo() {
+    const { videos } = getEditMediaCounts();
+    if (videos >= EDIT_MAX_VIDEOS) {
+      Alert.alert('Limit reached', `Maximum ${EDIT_MAX_VIDEOS} video per entry.`);
+      return;
+    }
+    const ok = await ensureCameraPermission();
+    if (!ok) return;
+
+    setMediaBusy(true);
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        videoMaxDuration: 30,
+        allowsEditing: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      let sizeMb = 0;
+      if (Platform.OS !== 'web') {
+        const info = await getInfoAsync(asset.uri, { size: true });
+        sizeMb = (info.size || 0) / (1024 * 1024);
+      }
+      setEditMediaItems(prev => ([
+        ...prev,
+        {
+          uri: asset.uri,
+          type: 'video',
+          source: 'camera',
+          mimeType: asset.mimeType || 'video/mp4',
+          name: `video_${Date.now()}.mp4`,
+          sizeMb,
+        },
+      ]));
+    } finally {
+      setMediaBusy(false);
+    }
+  }
+
+  async function pickEditFile() {
+    const { files } = getEditMediaCounts();
+    if (files >= EDIT_MAX_FILES) {
+      Alert.alert('Limit reached', `Maximum ${EDIT_MAX_FILES} files per entry.`);
+      return;
+    }
+
+    setMediaBusy(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+
+      const mediaType = inferMediaType({
+        type: asset.type,
+        mimeType: asset.mimeType,
+        name: asset.name,
+        uri: asset.uri,
+      });
+      if (!mediaType) {
+        Alert.alert('Unsupported file', 'Only image or video files can be attached.');
+        return;
+      }
+
+      let sizeMb = 0;
+      if (Platform.OS !== 'web') {
+        const info = await getInfoAsync(asset.uri, { size: true });
+        sizeMb = (info.size || 0) / (1024 * 1024);
+      }
+
+      setEditMediaItems(prev => ([
+        ...prev,
+        {
+          uri: asset.uri,
+          type: mediaType,
+          source: 'file',
+          mimeType: asset.mimeType,
+          name: asset.name || `${mediaType}_${Date.now()}`,
+          sizeMb,
+        },
+      ]));
+    } finally {
+      setMediaBusy(false);
+    }
   }
 
   // ── Status badge ───────────────────────────────────────────────────────────
@@ -247,46 +454,51 @@ export default function SettingsScreen() {
   }
 
   const pendingCount = queue.filter(i => i.syncStatus !== 'synced').length;
+  const editPhotos = editMediaItems.filter(m => inferMediaType(m) === 'photo');
+
+  function handleLogout() {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out', style: 'destructive',
+          onPress: async () => {
+            await logout();
+            navigation.replace('Login');
+          },
+        },
+      ]
+    );
+  }
+  const editVideos = editMediaItems.filter(m => inferMediaType(m) === 'video');
+  const editFiles = editMediaItems.filter(m => m.source === 'file');
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
-        <Text style={styles.subtitle}>EKK IDMS · Field App</Text>
+        <Text style={styles.subtitle}>Connectivity and offline queue</Text>
       </View>
 
-      {/* Network status */}
-      <Text style={styles.sectionLabel}>Network Status</Text>
+      <Text style={styles.sectionLabel}>Network Mode</Text>
       <View style={styles.card}>
         <View style={styles.netRow}>
           <View style={[styles.dot, { backgroundColor: isConnected ? '#16a34a' : '#dc2626' }]} />
           <Text style={styles.netText}>
-            {isConnected ? 'Connected to internet' : 'No internet connection'}
+            {isConnected ? 'Connected' : 'No network'}
           </Text>
         </View>
-        <View style={styles.netRow}>
-          <View style={[styles.dot, { backgroundColor: effectiveMode === 'online' ? '#16a34a' : '#f59e0b' }]} />
-          <Text style={styles.netText}>
-            {effectiveMode === 'online'
-              ? 'Online mode — submitting directly to server'
-              : offlineReason === 'no_network'
-                ? 'Auto offline — no network detected'
-                : 'Offline mode — saving to local queue'}
-          </Text>
-        </View>
-      </View>
 
-      {/* Mode toggle */}
-      <Text style={styles.sectionLabel}>Mode</Text>
-      <View style={styles.card}>
         <View style={styles.toggleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.toggleLabel}>Offline Mode</Text>
+            <Text style={styles.toggleLabel}>
+              {manualMode === 'offline' ? 'Offline (manual)' : 'Online (manual)'}
+            </Text>
             <Text style={styles.toggleSub}>
-              {manualMode === 'offline'
-                ? 'Entries save locally — sync manually from queue below'
-                : 'Entries submit directly to server when you tap Submit'}
+              Effective mode: {effectiveMode}
+              {offlineReason ? ` (${offlineReason})` : ''}
             </Text>
           </View>
           <Switch
@@ -296,10 +508,11 @@ export default function SettingsScreen() {
             thumbColor="#fff"
           />
         </View>
+
         {!isConnected && manualMode === 'online' && (
           <View style={styles.autoOfflineBanner}>
             <Text style={styles.autoOfflineText}>
-              ⚠️ No network — entries will auto-save to queue
+              No network - entries will auto-save to queue
             </Text>
           </View>
         )}
@@ -405,6 +618,11 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      {/* Sign Out */}
+      <TouchableOpacity style={styles.signOutBtn} onPress={handleLogout}>
+        <Text style={styles.signOutText}>Sign Out</Text>
+      </TouchableOpacity>
+
       {/* Edit modal */}
       <Modal visible={!!editItem} animationType="slide" presentationStyle="pageSheet">
         <ScrollView style={styles.modalContainer} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -415,16 +633,37 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.modalField}>
+            <Text style={styles.modalLabel}>Entry Date</Text>
+            <TouchableOpacity style={styles.modalDatePicker} onPress={() => setShowEditDatePick(true)}>
+              <Text style={styles.modalDateIcon}>📅</Text>
+              <Text style={styles.modalDateValue}>
+                {editDate.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+            {showEditDatePick && (
+              <DateTimePicker
+                value={editDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                maximumDate={new Date()}
+                onChange={(_, date) => {
+                  setShowEditDatePick(false);
+                  if (date) setEditDate(date);
+                }}
+              />
+            )}
+          </View>
+
           {[
             { key: 'activity_code',   label: 'Activity Code',  placeholder: 'GSB / WMM / BC...' },
             { key: 'stage',           label: 'Stage',          placeholder: 'GSB / WMM / BC...' },
-            { key: 'chainage_from',   label: 'Chainage From',  placeholder: '1.2',  keyboard: 'numeric' },
-            { key: 'chainage_to',     label: 'Chainage To',    placeholder: '1.3',  keyboard: 'numeric' },
-            { key: 'road_side',       label: 'Road Side',      placeholder: 'BS / FS / Both' },
+            { key: 'chainage_from',   label: 'Chainage From',  placeholder: '1+200',  keyboard: 'numeric' },
+            { key: 'chainage_to',     label: 'Chainage To',    placeholder: '1+450',  keyboard: 'numeric' },
+            { key: 'road_side',       label: 'Road Side',      placeholder: 'LHS / RHS / Both' },
             { key: 'contractor_name', label: 'Contractor',     placeholder: 'Self' },
             { key: 'rfi_number',      label: 'RFI Number',     placeholder: 'Optional', keyboard: 'numeric' },
             { key: 'layer_section',   label: 'Layer / Section',placeholder: 'L1' },
-            { key: 'entry_date',      label: 'Entry Date',     placeholder: 'YYYY-MM-DD' },
             { key: 'remarks',         label: 'Remarks',        placeholder: 'Weather, delays...' },
           ].map(f => (
             <View key={f.key} style={styles.modalField}>
@@ -432,13 +671,116 @@ export default function SettingsScreen() {
               <TextInput
                 style={[styles.modalInput, f.key === 'remarks' && { height: 72, textAlignVertical: 'top' }]}
                 value={editForm[f.key] || ''}
-                onChangeText={v => setEditForm(prev => ({ ...prev, [f.key]: v }))}
+                onChangeText={v => (
+                  f.key === 'chainage_from' || f.key === 'chainage_to'
+                    ? onEditChainageChange(f.key, v)
+                    : setEditForm(prev => ({ ...prev, [f.key]: v }))
+                )}
                 placeholder={f.placeholder}
                 keyboardType={f.keyboard || 'default'}
                 multiline={f.key === 'remarks'}
               />
             </View>
           ))}
+
+          {editQuantity !== null && (
+            <View style={styles.modalQtyCard}>
+              <Text style={styles.modalQtyValue}>{editQuantity.toLocaleString()}</Text>
+              <Text style={styles.modalQtyUnit}> linear metres</Text>
+            </View>
+          )}
+
+          <Text style={styles.modalLabel}>Media (Capture Again)</Text>
+          <View style={styles.modalMediaActions}>
+            <TouchableOpacity
+              style={[styles.modalMediaBtn, editPhotos.length >= EDIT_MAX_PHOTOS && styles.modalMediaBtnDisabled]}
+              onPress={captureEditPhoto}
+              disabled={mediaBusy || editPhotos.length >= EDIT_MAX_PHOTOS}
+            >
+              <Text style={styles.modalMediaBtnIcon}>📷</Text>
+              <Text style={styles.modalMediaBtnText}>Photo</Text>
+              <Text style={styles.modalMediaBtnCount}>{editPhotos.length}/{EDIT_MAX_PHOTOS}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalMediaBtn, editVideos.length >= EDIT_MAX_VIDEOS && styles.modalMediaBtnDisabled]}
+              onPress={captureEditVideo}
+              disabled={mediaBusy || editVideos.length >= EDIT_MAX_VIDEOS}
+            >
+              <Text style={styles.modalMediaBtnIcon}>🎥</Text>
+              <Text style={styles.modalMediaBtnText}>Video</Text>
+              <Text style={styles.modalMediaBtnCount}>{editVideos.length}/{EDIT_MAX_VIDEOS}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalMediaBtn, editFiles.length >= EDIT_MAX_FILES && styles.modalMediaBtnDisabled]}
+              onPress={pickEditFile}
+              disabled={mediaBusy || editFiles.length >= EDIT_MAX_FILES}
+            >
+              <Text style={styles.modalMediaBtnIcon}>📎</Text>
+              <Text style={styles.modalMediaBtnText}>File</Text>
+              <Text style={styles.modalMediaBtnCount}>{editFiles.length}/{EDIT_MAX_FILES}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {mediaBusy && (
+            <View style={styles.modalUploadingRow}>
+              <ActivityIndicator size="small" color="#1a1a1a" />
+              <Text style={styles.modalUploadingText}>Preparing media...</Text>
+            </View>
+          )}
+
+          {editPhotos.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+              {editPhotos.map((m, i) => {
+                const originalIndex = editMediaItems.indexOf(m);
+                return (
+                  <View key={`${m.uri}-${i}`} style={styles.modalThumbWrap}>
+                    <Image source={{ uri: m.uri }} style={styles.modalThumb} />
+                    <View style={styles.modalThumbMeta}>
+                      <Text style={styles.modalThumbSize}>{m.sizeMb ? `${m.sizeMb.toFixed(1)}MB` : 'Photo'}</Text>
+                      <TouchableOpacity onPress={() => removeEditMediaAt(originalIndex)} style={styles.modalThumbRemove}>
+                        <Text style={styles.modalThumbRemoveText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {editVideos.length > 0 && editVideos.map((m, i) => {
+            const originalIndex = editMediaItems.indexOf(m);
+            return (
+              <View key={`${m.uri}-${i}`} style={styles.modalVideoChip}>
+                <Text style={styles.modalVideoChipIcon}>🎥</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalVideoChipName}>{m.name || 'video'}</Text>
+                  <Text style={styles.modalVideoChipMeta}>{m.sizeMb ? `${m.sizeMb.toFixed(1)}MB` : 'Video file'}</Text>
+                </View>
+                <TouchableOpacity onPress={() => removeEditMediaAt(originalIndex)} style={styles.modalThumbRemove}>
+                  <Text style={styles.modalThumbRemoveText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+
+          {editFiles.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8, marginBottom: 8 }}>
+              {editFiles.map((m, i) => (
+                <View key={`${m.uri}-${i}`} style={styles.modalFileChip}>
+                  <Text style={styles.modalFileChipIcon}>{inferMediaType(m) === 'photo' ? '🖼️' : inferMediaType(m) === 'video' ? '🎬' : '📎'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalFileChipName} numberOfLines={1}>{m.name || 'media file'}</Text>
+                    <Text style={styles.modalFileChipMeta}>{m.sizeMb ? `${m.sizeMb.toFixed(1)}MB` : 'Attached'}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removeEditMediaAt(i)} style={styles.modalThumbRemove}>
+                    <Text style={styles.modalThumbRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
 
           <TouchableOpacity style={styles.saveEditBtn} onPress={saveEdit}>
             <Text style={styles.saveEditText}>Save Changes</Text>
@@ -499,6 +841,36 @@ const styles = StyleSheet.create({
   modalField:       { marginBottom: 12 },
   modalLabel:       { fontSize: 11, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   modalInput:       { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 10, padding: 12, fontSize: 15, color: '#1a1a1a' },
+  modalDatePicker:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e0e0e0' },
+  modalDateIcon:    { fontSize: 18 },
+  modalDateValue:   { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
+  modalQtyCard:     { flexDirection: 'row', alignItems: 'baseline', backgroundColor: '#e8f5e9', borderRadius: 8, padding: 10, marginBottom: 12 },
+  modalQtyValue:    { fontSize: 20, fontWeight: '700', color: '#2e7d32' },
+  modalQtyUnit:     { fontSize: 12, color: '#4caf50' },
+  modalMediaActions:{ flexDirection: 'row', gap: 8, marginBottom: 10 },
+  modalMediaBtn:    { flex: 1, backgroundColor: '#fff', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#e0e0e0' },
+  modalMediaBtnDisabled: { opacity: 0.4 },
+  modalMediaBtnIcon:{ fontSize: 22, marginBottom: 2 },
+  modalMediaBtnText:{ fontSize: 12, fontWeight: '600', color: '#1a1a1a' },
+  modalMediaBtnCount:{ fontSize: 10, color: '#999', marginTop: 2 },
+  modalUploadingRow:{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  modalUploadingText:{ fontSize: 12, color: '#666' },
+  modalThumbWrap:   { marginRight: 10, alignItems: 'center' },
+  modalThumb:       { width: 76, height: 76, borderRadius: 8, backgroundColor: '#eee' },
+  modalThumbMeta:   { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
+  modalThumbSize:   { fontSize: 10, color: '#999' },
+  modalThumbRemove: { backgroundColor: '#fee2e2', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+  modalThumbRemoveText: { fontSize: 11, color: '#dc2626', fontWeight: '700' },
+  modalVideoChip:   { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#e0e0e0' },
+  modalVideoChipIcon:{ fontSize: 20 },
+  modalVideoChipName:{ fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
+  modalVideoChipMeta:{ fontSize: 11, color: '#888' },
+  modalFileChip:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 10, marginRight: 8, minWidth: 220 },
+  modalFileChipIcon:{ fontSize: 16, marginRight: 8 },
+  modalFileChipName:{ fontSize: 13, fontWeight: '500', color: '#1a1a1a', flex: 1 },
+  modalFileChipMeta:{ fontSize: 11, color: '#666' },
   saveEditBtn:      { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   saveEditText:     { color: '#fff', fontWeight: '600', fontSize: 16 },
+  signOutBtn:       { margin: 16, marginTop: 24, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#dc2626', alignItems: 'center' },
+  signOutText:      { color: '#dc2626', fontWeight: '600', fontSize: 15 },
 });

@@ -122,13 +122,14 @@ export async function enqueueEntry(payload, mediaItems = []) {
 }
 
 /** Update payload of an existing queued entry */
-export async function updateQueueEntry(localId, newPayload) {
+export async function updateQueueEntry(localId, newPayload, newMediaItems) {
   const queue = await loadQueue();
   const item  = queue.find(i => i.localId === localId);
   if (item) {
     item.payload    = newPayload;
     item.syncStatus = 'pending';   // reset to pending after edit
     item.failReason = null;
+    if (newMediaItems !== undefined) item.mediaItems = newMediaItems;
   }
   await saveQueue(queue);
 }

@@ -136,10 +136,10 @@ export function parseVoiceTranscript(raw: string): ParsedCapture {
   }
 
   // Road side
-  if      (t.includes('both side') || /\bbs\b/.test(t)) result.road_side = 'BS';
-  else if (t.includes('both'))                           result.road_side = 'Both';
-  else if (t.includes('far side')  || /\bfs\b/.test(t)) result.road_side = 'FS';
-  else if (t.includes('median'))                         result.road_side = 'Median';
+  if      (t.includes('both side') || t.includes('both sides') || t.includes('both')) result.road_side = 'Both';
+  else if (t.includes('left side') || t.includes('lhs') || /\blhs\b/.test(t))         result.road_side = 'LHS';
+  else if (t.includes('right side') || t.includes('rhs') || /\brhs\b/.test(t))        result.road_side = 'RHS';
+  else if (t.includes('median'))                                                        result.road_side = 'Median';
 
   // RFI
   const rfi = raw.match(/rfi\s*(\d+)/i);

@@ -1,35 +1,52 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Alert
 } from 'react-native';
-import { login } from '../services/auth';
+import NetInfo from '@react-native-community/netinfo';
+import { login, tryOfflineLogin } from '../services/auth';
+import { getApiErrorMessage, API_BASE } from '../services/api';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail]         = useState('admin@ekk.in');
   const [password, setPassword]   = useState('');
   const [showPass, setShowPass]   = useState(false);
   const [loading, setLoading]     = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected ?? false);
+    });
+    return unsubscribe;
+  }, []);
 
   async function handleLogin() {
     if (!email || !password) {
-        Alert.alert('Error', 'Enter email and password');
-        return;
+      Alert.alert('Error', 'Enter email and password');
+      return;
     }
     setLoading(true);
     try {
+      if (!isConnected) {
+        // Offline path — validate against cached credentials
+        await tryOfflineLogin(email, password);
+        console.log('Offline login success');
+        navigation.replace('Main');
+      } else {
+        // Online path — normal server login
         const result = await login(email, password);
         console.log('Login success:', result);
         navigation.replace('Main');
+      }
     } catch (e) {
-        console.log('Login error full:', JSON.stringify(e));
-        console.log('Response:', e?.response?.status, e?.response?.data);
-        console.log('Message:', e?.message);
-        Alert.alert('Login Failed', JSON.stringify(e?.response?.data) || e?.message || 'Unknown error');
+      console.log('Login error:', e?.response?.status, e?.message);
+      const msg = getApiErrorMessage(e);
+      Alert.alert('Login Failed', msg);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-    }
+  }
 
   return (
     <KeyboardAvoidingView
@@ -37,6 +54,12 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.card}>
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>📵 No network — signing in with cached credentials</Text>
+          </View>
+        )}
+
         <Text style={styles.brand}>EKK IDMS</Text>
         <Text style={styles.sub}>Field Capture System</Text>
 
@@ -68,17 +91,22 @@ export default function LoginScreen({ navigation }) {
         </View>
 
         <TouchableOpacity
-          style={[styles.btn, loading && styles.btnDisabled]}
+          style={[styles.btn, loading && styles.btnDisabled, !isConnected && styles.btnOffline]}
           onPress={handleLogin}
           disabled={loading}
         >
           {loading
             ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.btnText}>Sign In</Text>
+            : <Text style={styles.btnText}>{isConnected ? 'Sign In' : '📵 Sign In Offline'}</Text>
           }
         </TouchableOpacity>
 
+        {!isConnected && (
+          <Text style={styles.offlineHint}>Uses last saved credentials from this device</Text>
+        )}
+
         <Text style={styles.version}>v1.0 · EKK Infrastructure</Text>
+        <Text style={styles.apiHint}>API: {API_BASE}</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -169,5 +197,32 @@ const styles = StyleSheet.create({
     color: '#bbb',
     fontSize: 11,
     marginTop: 20,
+  },
+  apiHint: {
+    textAlign: 'center',
+    color: '#9ca3af',
+    fontSize: 10,
+    marginTop: 6,
+  },
+  btnOffline: {
+    backgroundColor: '#92400e',
+  },
+  offlineBanner: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 18,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    color: '#92400e',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  offlineHint: {
+    fontSize: 11,
+    color: '#aaa',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
