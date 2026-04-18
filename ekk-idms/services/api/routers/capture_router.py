@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -49,7 +50,14 @@ def create_capture(
         entry_date=payload.entry_date or datetime.utcnow(),
     )
     db.add(entry)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid project_id. Seed or create the project before submitting captures.",
+        ) from exc
     db.refresh(entry)
     return entry
 

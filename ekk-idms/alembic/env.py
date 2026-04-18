@@ -15,6 +15,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Prefer runtime DATABASE_URL (used by Docker services) over static alembic.ini URL.
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
+
 target_metadata = Base.metadata
 
 # ── Run migrations ────────────────────────────────────────────────────────────

@@ -57,3 +57,72 @@ arunprakashm or elurarunu@gmail.com
 PrithuPranee_15
 
 D:\EKK_IDMS_Project\ekk-mobile>eas build:configure
+
+git add .
+git commit -m "Your message"
+git push origin master
+
+ow offline login now works end-to-end:
+
+First time (online required)
+
+Sign in normally → app calls server, gets token
+Credentials are saved to SecureStore: SHA-256 hash of password + email + last token
+Every time after (no network)
+
+Login screen detects no network → shows amber banner "No network — signing in with cached credentials"
+Button changes to "📵 Sign In Offline"
+Entered password is SHA-256 hashed and compared against stored hash
+If email + hash match → restores cached token → navigates to Main
+If no cached credentials exist → shows a clear error: "Please sign in online at least once"
+Security notes:
+
+Password is never stored in plain text — only its SHA-256 hash
+Token and hash are stored in expo-secure-store (iOS Keychain / Android Keystore) — not AsyncStorage
+Offline session reuses the last valid token; API calls to the server will work again once network is restored
+===========================================
+4. GPS Location Overlay Feature (NEW)
+
+When capturing photos on the mobile app:
+- GPS location (latitude, longitude) is automatically captured
+- Timestamp of photo is recorded
+- Address is reverse-geocoded from coordinates (when online)
+- Location data is embedded with the image as metadata
+
+Implementation:
+- utils/gpsOverlay.js handles location capture and geocoding
+- hooks/useMediaCapture.js integrates GPS capture into photo workflow
+- Permissions: App requests Location access when first photo is captured
+- Dependencies: expo-location, expo-file-system, nominatim-osm API
+
+Captured photo object now includes:
+{
+  uri: 'file://...',
+  type: 'photo',
+  name: 'photo_1234567890.jpg',
+  sizeMb: 1.23,
+  locationData: {
+    coords: { latitude, longitude, accuracy },
+    address: 'Human readable address',
+    timestamp: Date
+  }
+}
+
+Future Enhancement (for production):
+- Use react-native-skia or native module for visual text overlay on image
+- Write GPS data to image EXIF for compatibility with image viewers
+- Cache geocoding results for offline use
+
+See GPS_OVERLAY_FEATURE.md for detailed documentation
+============================================
+open DB- for Docker contanier
+http://localhost:8080/
+Field	Value
+System	PostgreSQL
+Server	db
+Username	ekk
+Password	(from  .env file)
+Database	ekk_idms
+
+Once logged in, click SQL command (top menu) and run
+=========================================

@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / '.env')
 from routers.media import router as media_router
+from routers.voice_router import router as voice_router
 from fastapi.staticfiles import StaticFiles
 
 
@@ -21,7 +22,6 @@ from routers import whatsapp_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
     yield
 
 app = FastAPI(
@@ -52,7 +52,8 @@ app.include_router(detector_router.router,     prefix="/api/detect",       tags=
 app.include_router(export_router.router,       prefix="/api/export",       tags=["M6 Nway Export"])
 app.include_router(whatsapp_router.router,     prefix="/api/whatsapp",     tags=["WhatsApp Capture"])
 
-app.include_router(media_router, prefix="/api/media", tags=["media"])
+app.include_router(voice_router,  prefix="/api/voice",  tags=["Voice AI"])
+app.include_router(media_router,  prefix="/api/media",  tags=["media"])
 app.mount("/media", StaticFiles(directory="media_uploads"), name="media")
 
 @app.get("/health", tags=["System"])

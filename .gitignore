@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Alembic pycache
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# Celery runtime
+celerybeat-schedule
+celerybeat.pid
+
+# Media uploads (user-uploaded files)
+services/api/media_uploads/
+ekk-idms/services/api/media_uploads/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documents
+*.docx
+*.xlsx
+*.pdf
