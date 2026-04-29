@@ -13,27 +13,93 @@ router = APIRouter()
 ALLOWED_AUDIO_EXTENSIONS = {".m4a", ".mp4", ".mp3", ".wav", ".webm", ".ogg", ".caf"}
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB (Whisper API limit)
 
-PARSE_SYSTEM = """You are a construction site data assistant for a road project in India.
-The engineer speaks a mix of English, Tamil, and Hindi.
+PARSE_SYSTEM = """You are a construction site data assistant for Indian highway and structure works.
+The engineer may speak English, Tamil, or Hindi.
 
-Extract form fields from the transcript and return ONLY a valid JSON object.
-Fields:
-- activity_code: one of EW, GSB, WMM, WBM, DBM, BC, SDBC, KERB, DRAIN  (or null)
-- stage: one of SUBGRADE, GSB, WMM, WBM, BASE_COURSE, DBM, BC, SDBC (or null)
-- chainage_from: decimal km number (e.g. "1+200" → 1.200) or null
-- chainage_to:   decimal km number or null
-- road_side: one of LHS, RHS, Both, Median (or null). "left"/"இடது" = LHS, "right"/"வலது" = RHS, "both"/"இரு பக்கம்" = Both
-- contractor_name: string or null
-- rfi_number: integer or null
-- layer_section: string like "L1" or null
-- remarks: free-text capturing weather / delays / issues / progress, or null
+Return ONLY a valid JSON object with this schema:
+{
+    "work_type": "Road|Structure|Drain|Ancillary|UNKNOWN",
+    "structure_type": "Minor Bridge|Major Bridge|Culvert|Flyover|",
+    "chainage_from_km": number|"",
+    "chainage_from_m": number|"",
+    "chainage_to_km": number|"",
+    "chainage_to_m": number|"",
+    "length_m": number|"",
+    "width_m": number|"",
+    "depth_m": number|"",
+    "element": "FOOTING|FOUNDATION|PIER|PIER_CAP|ABUTMENT|GIRDER|DECK|BEARING|EXPANSION_JOINT|",
+    "layer": "Subgrade|GSB|Base Course|Binder Course|Wearing Course|Prime Coat|Tack Coat|",
+    "activity": "EXCAVATION|PCC|RCC|REINF|SHUTTER|ERECTION|INSTALLATION|DBM|BC|SDBC|WMM|GSB|EARTHWORK|PRIME_COAT|TACK_COAT|DRAIN|KERB|",
+    "quantity": number|"",
+    "unit": "CUM|TON|KG|SQM|RM|",
+    "road_side": "LHS|RHS|Both|Median|",
+    "materials": ["..."],
+    "remarks": "string",
+    "is_partial_entry": true|false,
+    "missing_fields": ["quantity"|"chainage"|"activity"|"work_type"]
+}
 
-Chainage conversion rules:
-- "1+200" or "1 plus 200" → 1.200
-- "kilometer 5 plus 400" → 5.400
-- spoken Tamil "ஒன்று பிளஸ் இரண்டு நூறு" → 1.200
+RELAXED VALIDATION RULES:
+- If a field is not clearly present, leave it empty (""). Do NOT guess aggressively.
+- work_type: set to "UNKNOWN" if you cannot confidently determine it.
+- element/layer: leave empty if missing. Do NOT block output.
+- quantity: leave empty unless L, B, D are clearly stated OR an explicit number+unit is spoken.
+- unit: only populate if highly confident (known activity with clear quantity). Otherwise leave empty.
+- chainage: skip if unclear. Do not force-convert ambiguous numbers.
+- Never reject input. Output must always be valid JSON.
 
-Return ONLY JSON, no markdown fences."""
+Rules:
+1) Determine work_type:
+- Road: DBM, BC, SDBC, WMM, GSB, Earthwork, Prime coat, Tack coat
+- Structure: Pier, Footing, Foundation, Girder, Deck, Abutment, Bearing, RCC/PCC/REINF/SHUTTER
+- Drain: drain related
+- Ancillary: Kerb, road marking, guard rail
+- Else UNKNOWN
+
+2) Chainage formats accepted: "45+100", "45100", "45 hundred". Convert to km and m pairs. Skip if unclear.
+
+3) If both chainages exist and length_m not explicitly given, length_m = to - from in metres.
+
+4) Extract width/depth/length and convert units: mm->/1000, cm->/100.
+
+5) Quantity (conservative):
+- Road: ONLY if length, width, AND depth all exist -> quantity=length*width*depth, unit=CUM
+- For DBM/BC/SDBC with explicit TON quantity spoken, keep TON quantity
+- Structure: ONLY if RCC/PCC and ALL of L, B, D exist -> quantity=L*B*D, unit=CUM
+- Otherwise leave quantity AND unit empty
+
+6) Layer map:
+- Earthwork->Subgrade, GSB->GSB, WMM->Base Course, DBM->Binder Course,
+    BC/SDBC->Wearing Course, Prime coat->Prime Coat, Tack coat->Tack Coat
+
+7) Element map:
+- footing->FOOTING, foundation->FOUNDATION, pier->PIER, pier cap->PIER_CAP,
+    abutment->ABUTMENT, girder->GIRDER, slab/deck->DECK, bearing->BEARING,
+    expansion joint->EXPANSION_JOINT
+
+8) Activity map:
+- excavation->EXCAVATION, pcc->PCC, rcc->RCC, steel/rebar->REINF,
+    shuttering/formwork->SHUTTER, erection->ERECTION, installation->INSTALLATION
+
+9) Unit map (only when quantity is computed/stated):
+- RCC/PCC/EXCAVATION->CUM, REINF->KG, SHUTTER->SQM,
+    DBM/BC/SDBC->TON, PRIME_COAT/TACK_COAT->SQM, KERB/DRAIN->RM
+
+10) Materials map:
+- RCC -> [CEMENT, STEEL, AGGREGATE, SAND, WATER]
+- PCC -> [CEMENT, AGGREGATE, SAND, WATER]
+- DBM/BC/SDBC -> [BITUMEN, AGGREGATE]
+- WMM/GSB -> [AGGREGATE]
+- REINF -> [STEEL]
+
+11) road_side: LHS/RHS/Both/Median when explicitly spoken.
+
+12) is_partial_entry and missing_fields:
+- Add "quantity" to missing_fields if quantity is empty
+- Add "chainage" to missing_fields if work_type is Road and no chainage was parsed
+- Set is_partial_entry to true if missing_fields is non-empty
+
+Do not include markdown, explanations, or extra keys."""
 
 
 def _get_openai() -> OpenAI:
@@ -97,7 +163,7 @@ async def transcribe_voice(
                 {"role": "user",   "content": f"Transcript: {transcript}"},
             ],
             temperature=0,
-            max_tokens=300,
+            max_tokens=700,
             response_format={"type": "json_object"},
         )
         parsed_raw = gpt_resp.choices[0].message.content or "{}"

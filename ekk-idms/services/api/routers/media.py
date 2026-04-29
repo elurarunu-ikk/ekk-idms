@@ -10,9 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
-from auth import verify_token
+from auth import ensure_project_action, get_current_user
 from models.site_data import SiteDataTransaction
 from models.media import EntryMedia   # see migration below
+from models.user import User
 
 router = APIRouter()
 
@@ -54,7 +55,7 @@ async def upload_media(
     media_type: str        = Form(...),    # 'photo' or 'video'
     file:       UploadFile = File(...),
     db:         Session    = Depends(get_db),
-    _:          dict       = Depends(verify_token),
+    user:       User       = Depends(get_current_user),
 ):
     # Validate entry exists
     try:
@@ -65,6 +66,7 @@ async def upload_media(
     entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == eid).first()
     if not entry:
         raise HTTPException(404, 'Entry not found')
+    ensure_project_action(db, user, entry.project_id, 'capture', 'add')
 
     # Validate media type
     if media_type not in ('photo', 'video'):
@@ -128,12 +130,16 @@ async def upload_media(
 def list_media(
     entry_id: str,
     db:       Session = Depends(get_db),
-    _:        dict    = Depends(verify_token),
+    user:     User    = Depends(get_current_user),
 ):
     try:
         eid = uuid.UUID(entry_id)
     except ValueError:
         raise HTTPException(400, 'Invalid entry_id')
+    entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == eid).first()
+    if not entry:
+        raise HTTPException(404, 'Entry not found')
+    ensure_project_action(db, user, entry.project_id, 'capture', 'view')
     media = db.query(EntryMedia).filter(EntryMedia.entry_id == eid).all()
     return media
 
@@ -143,7 +149,7 @@ def list_media(
 def delete_media(
     media_id: str,
     db:       Session = Depends(get_db),
-    _:        dict    = Depends(verify_token),
+    user:     User    = Depends(get_current_user),
 ):
     try:
         mid = uuid.UUID(media_id)
@@ -152,6 +158,10 @@ def delete_media(
     media = db.query(EntryMedia).filter(EntryMedia.id == mid).first()
     if not media:
         raise HTTPException(404, 'Media not found')
+    entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == media.entry_id).first()
+    if not entry:
+        raise HTTPException(404, 'Entry not found')
+    ensure_project_action(db, user, entry.project_id, 'capture', 'delete')
     delete_file(media.url)
     db.delete(media)
     db.commit()

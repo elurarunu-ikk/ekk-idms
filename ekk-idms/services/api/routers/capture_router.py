@@ -6,8 +6,9 @@ from datetime import datetime
 import uuid
 
 from database import get_db
-from auth import verify_token
+from auth import ensure_project_action, get_accessible_projects_for_user, get_current_user
 from models.site_data import SiteDataTransaction
+from models.user import User
 from schemas.capture import (
     ManualCaptureRequest,
     ApproveRequest,
@@ -23,8 +24,9 @@ router = APIRouter()
 def create_capture(
     payload: ManualCaptureRequest,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
+    ensure_project_action(db, user, payload.project_id, "capture", "add")
     entry = SiteDataTransaction(
         id=uuid.uuid4(),
         project_id=payload.project_id,
@@ -34,6 +36,15 @@ def create_capture(
         chainage_to=payload.chainage_to,
         stage=payload.stage,
         quantity_lm=payload.quantity_lm,
+        quantity=payload.quantity,
+        unit=payload.unit,
+        work_type=payload.work_type,
+        structure_type=payload.structure_type,
+        layer_code=payload.layer_code or payload.layer,
+        element_code=payload.element_code or payload.element,
+        length_m=payload.length_m,
+        width_m=payload.width_m,
+        depth_m=payload.depth_m,
         contractor_name=payload.contractor_name,
         road_side=payload.road_side,
         rfi_number=payload.rfi_number,
@@ -44,6 +55,8 @@ def create_capture(
         gps_end_lat=payload.gps_end_lat,
         gps_end_lng=payload.gps_end_lng,
         gps_accuracy_m=payload.gps_accuracy_m,
+        weather_code=payload.weather_code,
+        progress_status=payload.progress_status,
         approved=False,
         rejected=False,
         payment_qualifies=False,
@@ -71,11 +84,16 @@ def list_captures(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, le=500),
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
     q = db.query(SiteDataTransaction)
 
+    if user.user_type not in {"SUPER ADMIN", "ADMIN"}:
+        allowed_ids = [project.id for project, _ in get_accessible_projects_for_user(db, user)]
+        q = q.filter(SiteDataTransaction.project_id.in_(allowed_ids))
+
     if project_id:
+        ensure_project_action(db, user, project_id, "capture", "view")
         q = q.filter(SiteDataTransaction.project_id == project_id)
     if approved is not None:
         q = q.filter(SiteDataTransaction.approved == approved)
@@ -94,13 +112,17 @@ def list_captures(
 def list_pending(
     project_id: Optional[uuid.UUID] = Query(None),
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
     q = db.query(SiteDataTransaction).filter(
         SiteDataTransaction.approved == False,
         SiteDataTransaction.rejected == False,
     )
+    if user.user_type not in {"SUPER ADMIN", "ADMIN"}:
+        allowed_ids = [project.id for project, _ in get_accessible_projects_for_user(db, user)]
+        q = q.filter(SiteDataTransaction.project_id.in_(allowed_ids))
     if project_id:
+        ensure_project_action(db, user, project_id, "approvals", "view")
         q = q.filter(SiteDataTransaction.project_id == project_id)
 
     total = q.count()
@@ -112,11 +134,12 @@ def list_pending(
 def get_capture(
     entry_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
     entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+    ensure_project_action(db, user, entry.project_id, "capture", "view")
     return entry
 
 
@@ -125,11 +148,12 @@ def update_capture(
     entry_id: uuid.UUID,
     payload: ManualCaptureRequest,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
     entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+    ensure_project_action(db, user, entry.project_id, "capture", "edit")
     if entry.approved:
         raise HTTPException(status_code=400, detail="Cannot edit an approved entry")
 
@@ -138,10 +162,21 @@ def update_capture(
     entry.chainage_to = payload.chainage_to
     entry.stage = payload.stage
     entry.quantity_lm = payload.quantity_lm
+    entry.quantity = payload.quantity
+    entry.unit = payload.unit
+    entry.work_type = payload.work_type
+    entry.structure_type = payload.structure_type
+    entry.layer_code = payload.layer_code or payload.layer
+    entry.element_code = payload.element_code or payload.element
+    entry.length_m = payload.length_m
+    entry.width_m = payload.width_m
+    entry.depth_m = payload.depth_m
     entry.contractor_name = payload.contractor_name
     entry.road_side = payload.road_side
     entry.rfi_number = payload.rfi_number
     entry.layer_section = payload.layer_section
+    entry.weather_code = payload.weather_code
+    entry.progress_status = payload.progress_status
 
     db.commit()
     db.refresh(entry)
@@ -153,11 +188,12 @@ def approve_capture(
     entry_id: uuid.UUID,
     payload: ApproveRequest,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
     entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+    ensure_project_action(db, user, entry.project_id, "approvals", "approve")
     if entry.rejected:
         raise HTTPException(status_code=400, detail="Cannot approve a rejected entry")
 
@@ -177,11 +213,12 @@ def reject_capture(
     entry_id: uuid.UUID,
     payload: RejectRequest,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
     entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+    ensure_project_action(db, user, entry.project_id, "approvals", "approve")
     if entry.approved:
         raise HTTPException(status_code=400, detail="Cannot reject an approved entry")
 
@@ -200,11 +237,12 @@ def reject_capture(
 def delete_capture(
     entry_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_token),
+    user: User = Depends(get_current_user),
 ):
     entry = db.query(SiteDataTransaction).filter(SiteDataTransaction.id == entry_id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+    ensure_project_action(db, user, entry.project_id, "capture", "delete")
     if entry.approved:
         raise HTTPException(status_code=400, detail="Cannot delete an approved entry")
 

@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'services', 'ap
 from database import Base
 from models.site_data import SiteDataTransaction
 from models.media import EntryMedia
+from models.plan_data import PlanData
 
 # ── Alembic Config ────────────────────────────────────────────────────────────
 config = context.config
