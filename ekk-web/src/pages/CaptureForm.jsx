@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { createCapture, getCapture, updateCapture } from '../services/apiService';
+import { createCapture, getApiErrorMessage, getCapture, updateCapture } from '../services/apiService';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useProjectSession from '../hooks/useProjectSession';
 
@@ -34,7 +34,12 @@ const CaptureForm = () => {
 
   useEffect(() => {
     if (!isEdit && selectedProjectId) {
-      setFormData((prev) => ({ ...prev, project_id: selectedProjectId }));
+      setFormData((prev) => {
+        if (prev.project_id === selectedProjectId) {
+          return prev;
+        }
+        return { ...prev, project_id: selectedProjectId };
+      });
     }
   }, [isEdit, selectedProjectId]);
 
@@ -67,7 +72,7 @@ const CaptureForm = () => {
           layer_section: entry.layer_section || '',
         });
       } catch (err) {
-        toast.error(err.response?.data?.detail || 'Something went wrong');
+        toast.error(getApiErrorMessage(err, 'Something went wrong'));
       } finally {
         setLoading(false);
       }
@@ -87,7 +92,13 @@ const CaptureForm = () => {
     if (!Number.isNaN(from) && !Number.isNaN(to) && formData.chainage_from !== '' && formData.chainage_to !== '') {
       const quantity = to - from;
       if (quantity > 0) {
-        setFormData((prev) => ({ ...prev, quantity_lm: quantity.toFixed(3) }));
+        const autoQuantity = quantity.toFixed(3);
+        setFormData((prev) => {
+          if (prev.quantity_lm === autoQuantity) {
+            return prev;
+          }
+          return { ...prev, quantity_lm: autoQuantity };
+        });
       }
     }
   }, [formData.chainage_from, formData.chainage_to, manualQuantity]);
@@ -122,6 +133,7 @@ const CaptureForm = () => {
     const from = Number(formData.chainage_from);
     const to = Number(formData.chainage_to);
     const qty = Number(formData.quantity_lm);
+    const rfi = Number(formData.rfi_number);
 
     if (to <= from) {
       toast.error('Chainage To must be greater than Chainage From');
@@ -130,6 +142,11 @@ const CaptureForm = () => {
 
     if (qty <= 0) {
       toast.error('Quantity (LM) must be positive');
+      return false;
+    }
+
+    if (!Number.isInteger(rfi)) {
+      toast.error('RFI Number must be a whole number');
       return false;
     }
 
@@ -150,7 +167,7 @@ const CaptureForm = () => {
       quantity_lm: Number(formData.quantity_lm),
       contractor_name: formData.contractor_name.trim(),
       road_side: formData.road_side,
-      rfi_number: formData.rfi_number.trim(),
+      rfi_number: Number(formData.rfi_number),
       layer_section: formData.layer_section.trim(),
     };
 
@@ -164,7 +181,7 @@ const CaptureForm = () => {
       toast.success('Entry saved successfully');
       navigate('/captures');
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Something went wrong');
+      toast.error(getApiErrorMessage(err, 'Something went wrong'));
     } finally {
       setSaving(false);
     }
@@ -284,7 +301,8 @@ const CaptureForm = () => {
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">RFI Number *</label>
           <input
-            type="text"
+            type="number"
+            step="1"
             value={formData.rfi_number}
             onChange={(e) => updateField('rfi_number', e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"

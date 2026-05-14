@@ -4,6 +4,43 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
 });
 
+export const getApiErrorMessage = (error, fallback = 'Something went wrong') => {
+  const detail = error?.response?.data?.detail;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const combined = detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item.msg === 'string') return item.msg;
+        return '';
+      })
+      .filter(Boolean)
+      .join('; ');
+
+    if (combined) {
+      return combined;
+    }
+  }
+
+  if (detail && typeof detail === 'object' && typeof detail.msg === 'string') {
+    return detail.msg;
+  }
+
+  if (typeof error?.response?.data?.message === 'string' && error.response.data.message.trim()) {
+    return error.response.data.message;
+  }
+
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
 // Request interceptor: attach Bearer token
 api.interceptors.request.use(
   (config) => {

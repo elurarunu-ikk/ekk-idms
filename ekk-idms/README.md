@@ -16,7 +16,7 @@ docker-compose up -d
 | Service     | URL                         |
 |-------------|----------------------------|
 | API docs    | http://localhost:8000/docs  |
-| Frontend    | http://localhost:3000       |
+| Frontend    | http://localhost:5173       |
 | Metabase BI | http://localhost:3100       |
 
 ## Phase 1 Build Order
@@ -29,7 +29,7 @@ docker-compose up -d
 6. M4 Daily entry
 7. M3 Design master
 8. M6 Nway export
-9. React frontend (`services/frontend/`)
+9. React frontend (`../ekk-web/`)
 10. Metabase dashboards
 
 ## Tech Stack

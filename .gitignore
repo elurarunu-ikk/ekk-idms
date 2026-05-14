@@ -44,3 +44,12 @@ Thumbs.db
 *.docx
 *.xlsx
 *.pdf
+
+# Copilot / Claude session files
+.claude/
+SETUP_COMPLETE.md
+App_activation.txt
+
+# EAS build artifacts
+*.jks
+*.keystore
