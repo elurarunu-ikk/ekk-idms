@@ -1,23 +1,71 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, Alert, ActivityIndicator, Image, Platform,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { parseVoiceTranscript, formatChainage } from '../utils/voiceParser';
+import { parseVoiceTranscript, normalizeParsedCapture } from '../utils/voiceParser';
 import { useMediaCapture } from '../hooks/useMediaCapture';
 import { useNetworkMode } from '../hooks/useNetworkMode';
-import { enqueueEntry } from '../utils/offlineQueue';
+import { addSubmittedEntryId, enqueueEntry } from '../utils/offlineQueue';
 import { formatLocationText } from '../utils/gpsOverlay';
 import { startAudioRecording, stopAudioRecording, uploadAndTranscribe } from '../utils/whisperVoice';
 import { logout } from '../services/auth';
-import api from '../services/api';
-import { STAGES, ACTIVITY_CODES, ROAD_SIDES } from '../constants/data';
+import api, { getApiErrorMessage } from '../services/api';
+import { getSelectedProject } from '../services/session';
+import {
+  WORK_TYPES,
+  LAYERS,
+  ELEMENTS,
+  STRUCTURE_TYPES,
+  ROAD_SIDES,
+  getActivitiesForWorkType,
+  getRoadActivitiesForLayer,
+  getStructureElementsForType,
+  getStructureActivitiesForSelection,
+  deriveStageFromSelection,
+} from '../constants/data';
 
-const PROJECT_ID = '550e8400-e29b-41d4-a716-446655440000';
 const STT_LANG   = 'en-IN';
+const WEATHER_OPTIONS = [
+  { label: 'Sunny', value: 'SUNNY' },
+  { label: 'Cloudy', value: 'CLOUDY' },
+  { label: 'Rainy', value: 'RAINY' },
+];
+const PROGRESS_STATUS_OPTIONS = [
+  { label: 'Started', value: 'STARTED' },
+  { label: 'In Progress/Ongoing', value: 'ONGOING' },
+  { label: 'Completed', value: 'COMPLETED' },
+];
+
+function showAlert(title, message = '', buttons) {
+  if (Platform.OS !== 'web') {
+    Alert.alert(title, message, buttons);
+    return;
+  }
+
+  const text = message ? `${title}\n\n${message}` : title;
+
+  if (!Array.isArray(buttons) || buttons.length <= 1) {
+    window.alert(text);
+    buttons?.[0]?.onPress?.();
+    return;
+  }
+
+  const confirmButton =
+    buttons.find((button) => !button.style || button.style === 'default' || button.style === 'destructive') ||
+    buttons[buttons.length - 1];
+  const cancelButton = buttons.find((button) => button.style === 'cancel');
+
+  if (window.confirm(text)) {
+    confirmButton?.onPress?.();
+    return;
+  }
+
+  cancelButton?.onPress?.();
+}
 
 function toDateString(date) {
   // Returns YYYY-MM-DD in local time
@@ -32,15 +80,143 @@ function getPhotoGpsPreview(photo) {
   return formatLocationText(photo.locationData);
 }
 
+function getActivityDefinition(activityCode) {
+  return ['ROAD', 'STRUCTURE', 'DRAIN', 'ANCILLARY', 'MISC']
+    .flatMap((workType) => getActivitiesForWorkType(workType))
+    .find((activity) => activity.code === activityCode);
+}
+
+function deriveWorkTypeFromSelection(activityCode, stageCode) {
+  if (LAYERS.some((layer) => layer.code === stageCode)) return 'ROAD';
+  if (ELEMENTS.some((element) => element.code === stageCode)) return 'STRUCTURE';
+  if (['DRAIN', 'ANCILLARY', 'MISC'].includes(stageCode)) return stageCode;
+
+  const activity = getActivityDefinition(activityCode);
+  if (activity?.workTypes?.length === 1) return activity.workTypes[0];
+  if (activity?.workTypes?.includes('DRAIN')) return 'DRAIN';
+  return '';
+}
+
+function mapWorkTypeLabelToCode(label) {
+  if (!label) return '';
+  const map = {
+    ROAD: 'ROAD',
+    STRUCTURE: 'STRUCTURE',
+    DRAIN: 'DRAIN',
+    ANCILLARY: 'ANCILLARY',
+    MISC: 'MISC',
+  };
+  return map[String(label).toUpperCase()] || '';
+}
+
+function toNumberOrNull(val) {
+  if (val === '' || val == null) return null;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : null;
+}
+
+function mapParsedActivityToCaptureActivity(activity) {
+  const map = {
+    WMM: 'WMM_LAY',
+    GSB: 'GSB_LAY',
+    EARTHWORK: 'EARTHWORK',
+    DBM: 'DBM',
+    BC: 'BC',
+    SDBC: 'SDBC',
+    PRIME_COAT: 'PRIME_COAT',
+    TACK_COAT: 'TACK_COAT',
+    RCC: 'RCC',
+    PCC: 'PCC',
+    EXCAVATION: 'EXCAVATION',
+    REINF: 'REINF',
+    SHUTTER: 'SHUTTER',
+    ERECTION: 'ERECTION',
+    INSTALLATION: 'INSTALLATION',
+    DRAIN: 'DRAIN',
+    KERB: 'KERB',
+    MISC: 'MISC',
+  };
+  return map[String(activity || '').toUpperCase()] || '';
+}
+
+function mapParsedLayerToCode(layer) {
+  const map = {
+    SUBGRADE: 'SUBGRADE',
+    GSB: 'GSB',
+    WMM: 'WMM',
+    'BASE COURSE': 'BASE',
+    'BINDER COURSE': 'BINDER',
+    'WEARING COURSE': 'WEARING',
+    'PRIME COAT': 'PRIME',
+    'TACK COAT': 'TACK',
+  };
+  return map[String(layer || '').toUpperCase()] || '';
+}
+
+function mapParsedProgressStatus(status) {
+  const normalized = String(status || '').trim().toUpperCase();
+  if (!normalized) return '';
+  if (normalized === 'IN_PROGRESS' || normalized === 'IN PROGRESS' || normalized === 'ONGOING') return 'ONGOING';
+  if (normalized === 'COMPLETED') return 'COMPLETED';
+  if (normalized === 'STARTED') return 'STARTED';
+  return '';
+}
+
+function mapParsedWeatherCode(weatherCode, remarks) {
+  const normalized = String(weatherCode || '').trim().toUpperCase();
+  if (normalized === 'SUNNY' || normalized === 'CLOUDY' || normalized === 'RAINY') return normalized;
+  const text = `${String(weatherCode || '')} ${String(remarks || '')}`.toLowerCase();
+  if (/\bsunn?y\b|\bsun\b/.test(text)) return 'SUNNY';
+  if (/\bcloudy\b|\bcloud\b|\bovercast\b/.test(text)) return 'CLOUDY';
+  if (/\brainy\b|\brain\b|\bdrizzle\b|\bshower\b/.test(text)) return 'RAINY';
+  return '';
+}
+
+function detectLiveVoiceSelections(text) {
+  const t = String(text || '').toLowerCase();
+  const weather_code = /\bsunn?y\b|\bsun\b/.test(t)
+    ? 'SUNNY'
+    : /\bcloudy\b|\bcloud\b|\bovercast\b/.test(t)
+      ? 'CLOUDY'
+      : /\brainy\b|\brain\b|\bdrizzle\b|\bshower\b/.test(t)
+        ? 'RAINY'
+        : '';
+  const progress_status = /\b(completed|done|finished|finish)\b/.test(t)
+    ? 'COMPLETED'
+    : /\b(in\s*progress|ongoing|on\s*going|started|starting)\b/.test(t)
+      ? 'ONGOING'
+      : /\bstart\b/.test(t)
+        ? 'STARTED'
+        : '';
+  return { weather_code, progress_status };
+}
+
 export default function CaptureScreen() {
   const navigation = useNavigation();
+  const [selectedProject, setSelectedProject] = useState(null);
 
   const [form, setForm] = useState({
-    project_id:      PROJECT_ID,
+    project_id:      '',
+    work_type:       '',
+    structure_type:  '',
+    layer_code:      '',
+    element_code:    '',
     activity_code:   '',
     stage:           '',
+    chainage_from_km: '',
+    chainage_from_m:  '',
+    chainage_to_km:   '',
+    chainage_to_m:    '',
     chainage_from:   '',
     chainage_to:     '',
+    length_m:        '',
+    width_m:         '',
+    depth_m:         '',
+    quantity:        '',
+    unit:            '',
+    weather_code:    '',
+    progress_status: '',
+    materials:       [],
     road_side:       '',
     contractor_name: 'Self',
     rfi_number:      '',
@@ -59,6 +235,8 @@ export default function CaptureScreen() {
   const [parsing,       setParsing]       = useState(false);
   const [whisperStatus,  setWhisperStatus]  = useState('idle');   // idle | uploading | done | error
   const [transcriptSrc,  setTranscriptSrc]  = useState('local');  // local | ai
+  const [liveVoiceSelections, setLiveVoiceSelections] = useState({ weather_code: '', progress_status: '' });
+  const [parsedFlags,    setParsedFlags]    = useState({ is_partial_entry: false, missing_fields: [] });
   const [waypoints,  setWaypoints]  = useState([]);
   const [lastSaved,  setLastSaved]  = useState(null);
 
@@ -70,18 +248,91 @@ export default function CaptureScreen() {
     photoCount, videoCount, fileCount, maxPhotos, maxVideos, maxFiles,
   } = useMediaCapture();
 
-  const { isOffline, effectiveMode, offlineReason } = useNetworkMode();
+  const { isOffline, isConnected, effectiveMode, offlineReason, networkLoading } = useNetworkMode();
+  const showLayerSelector = form.work_type === 'ROAD';
+  const showStructureTypeSelector = form.work_type === 'STRUCTURE';
+  const showElementSelector = form.work_type === 'STRUCTURE';
+  const availableElements = showElementSelector ? getStructureElementsForType(form.structure_type) : ELEMENTS;
+  const canChooseActivity = Boolean(
+    form.work_type &&
+    (!showStructureTypeSelector || form.structure_type) &&
+    (!showLayerSelector || form.layer_code) &&
+    (!showElementSelector || form.element_code)
+  );
+  const availableActivities = showLayerSelector
+    ? getRoadActivitiesForLayer(form.layer_code)
+    : showElementSelector
+      ? getStructureActivitiesForSelection(form.structure_type, form.element_code)
+      : getActivitiesForWorkType(form.work_type);
 
-  // Auto-calculate quantity
+  const syncSelectedProject = useCallback(async () => {
+    const project = await getSelectedProject();
+    setSelectedProject(project);
+    setForm((prev) => ({ ...prev, project_id: project?.id || '' }));
+  }, []);
+
   useEffect(() => {
-    const f = parseChainage(form.chainage_from);
-    const t = parseChainage(form.chainage_to);
-    if (f !== null && t !== null && t > f) {
-      setQuantity(Math.round((t - f) * 1000));
-    } else {
-      setQuantity(null);
+    void syncSelectedProject();
+  }, [syncSelectedProject]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void syncSelectedProject();
+    }, [syncSelectedProject])
+  );
+
+  // Auto-calculate quantity and length for manual UX.
+  useEffect(() => {
+    const fk = toNumberOrNull(form.chainage_from_km);
+    const fm = toNumberOrNull(form.chainage_from_m);
+    const tk = toNumberOrNull(form.chainage_to_km);
+    const tm = toNumberOrNull(form.chainage_to_m);
+    const width = toNumberOrNull(form.width_m);
+    const depth = toNumberOrNull(form.depth_m);
+    const manualQty = toNumberOrNull(form.quantity);
+    const explicitLength = toNumberOrNull(form.length_m);
+
+    const fromM = fk != null && fm != null ? fk * 1000 + fm : null;
+    const toM = tk != null && tm != null ? tk * 1000 + tm : null;
+    const chainageLength = fromM != null && toM != null && toM > fromM ? toM - fromM : null;
+    const finalLength = chainageLength ?? explicitLength;
+
+    if (chainageLength != null) {
+      const derivedLength = String(chainageLength);
+      if (form.length_m !== derivedLength) {
+        setForm((prev) => {
+          if (prev.length_m === derivedLength) return prev;
+          return { ...prev, length_m: derivedLength };
+        });
+      }
     }
-  }, [form.chainage_from, form.chainage_to]);
+
+    if (manualQty != null) {
+      setQuantity(manualQty);
+      return;
+    }
+
+    if (finalLength != null && width != null && depth != null) {
+      setQuantity(Number((finalLength * width * depth).toFixed(3)));
+      return;
+    }
+
+    if (finalLength != null) {
+      setQuantity(finalLength);
+      return;
+    }
+
+    setQuantity(null);
+  }, [
+    form.chainage_from_km,
+    form.chainage_from_m,
+    form.chainage_to_km,
+    form.chainage_to_m,
+    form.length_m,
+    form.width_m,
+    form.depth_m,
+    form.quantity,
+  ]);
 
   // ── Speech events ─────────────────────────────────────────────────────────
   useSpeechRecognitionEvent('start', () => { setRecording(true); setTranscript(''); });
@@ -96,8 +347,20 @@ export default function CaptureScreen() {
   });
   useSpeechRecognitionEvent('result', (event) => {
     const text = event.results[0]?.transcript || '';
+    const live = detectLiveVoiceSelections(text);
+    setLiveVoiceSelections(live);
+    if (live.weather_code || live.progress_status) {
+      setForm((prev) => ({
+        ...prev,
+        weather_code: live.weather_code || prev.weather_code,
+        progress_status: live.progress_status || prev.progress_status,
+      }));
+    }
     setTranscript(prev => event.isFinal ? (prev + ' ' + text).trim() : text);
-    if (event.isFinal) applyParsed(parseVoiceTranscript(text));
+    if (event.isFinal) {
+      applyParsed(parseVoiceTranscript(text));
+      setLiveVoiceSelections({ weather_code: '', progress_status: '' });
+    }
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -109,22 +372,142 @@ export default function CaptureScreen() {
     return isNaN(n) ? null : n;
   }
 
+  function buildDecimalFromSplit(kmVal, mVal) {
+    const km = toNumberOrNull(kmVal);
+    const m = toNumberOrNull(mVal);
+    if (km == null || m == null) return null;
+    return km + m / 1000;
+  }
+
   function update(key, val) {
     setForm(f => ({ ...f, [key]: val }));
   }
 
+  function onChainageFieldChange(key, val) {
+    // Any chainage correction should re-drive derived length/qty.
+    setForm((prev) => ({ ...prev, [key]: val, quantity: '' }));
+  }
+
+  function updateWorkType(workType) {
+    setForm((current) => ({
+      ...current,
+      work_type: workType,
+      structure_type: '',
+      layer_code: '',
+      element_code: '',
+      activity_code: '',
+      stage: deriveStageFromSelection({ workType, layerCode: '', elementCode: '' }),
+    }));
+  }
+
+  function updateStructureType(structureType) {
+    setForm((current) => ({
+      ...current,
+      structure_type: structureType,
+      element_code: '',
+      activity_code: '',
+      stage: deriveStageFromSelection({
+        workType: current.work_type,
+        layerCode: current.layer_code,
+        elementCode: '',
+      }),
+    }));
+  }
+
+  function updateLayer(layerCode) {
+    setForm((current) => ({
+      ...current,
+      layer_code: layerCode,
+      element_code: '',
+      activity_code: '',
+      stage: deriveStageFromSelection({
+        workType: current.work_type,
+        layerCode,
+        elementCode: '',
+      }),
+    }));
+  }
+
+  function updateElement(elementCode) {
+    setForm((current) => ({
+      ...current,
+      element_code: elementCode,
+      layer_code: '',
+      activity_code: '',
+      stage: deriveStageFromSelection({
+        workType: current.work_type,
+        layerCode: '',
+        elementCode,
+      }),
+    }));
+  }
+
+  function updateActivity(activityCode) {
+    setForm((current) => ({
+      ...current,
+      activity_code: activityCode,
+      stage: deriveStageFromSelection({
+        workType: current.work_type,
+        layerCode: current.layer_code,
+        elementCode: current.element_code,
+      }),
+    }));
+  }
+
   function applyParsed(p) {
+    const parsed = normalizeParsedCapture(p);
+    setParsedFlags({
+      is_partial_entry: Boolean(parsed.is_partial_entry),
+      missing_fields: Array.isArray(parsed.missing_fields) ? parsed.missing_fields : [],
+    });
+    const parsedActivity = mapParsedActivityToCaptureActivity(parsed.activity_code || parsed.activity);
+    const parsedWorkType = mapWorkTypeLabelToCode(parsed.work_type) || deriveWorkTypeFromSelection(parsedActivity || parsed.activity_code, parsed.stage);
+    const stageValue = String(parsed.stage || '').toUpperCase();
+    const mappedLayer = mapParsedLayerToCode(parsed.layer);
+    const layerCode = parsedWorkType === 'ROAD'
+      ? (mappedLayer || (LAYERS.some((layer) => layer.code === stageValue) ? stageValue : ''))
+      : '';
+    const parsedElement = String(parsed.element || '').toUpperCase();
+    const elementCode = parsedWorkType === 'STRUCTURE'
+      ? (ELEMENTS.some((element) => element.code === parsedElement) ? parsedElement : (ELEMENTS.some((element) => element.code === stageValue) ? stageValue : ''))
+      : '';
+
+    const fromKm = parsed.chainage_from_km !== '' ? String(parsed.chainage_from_km) : '';
+    const fromM = parsed.chainage_from_m !== '' ? String(parsed.chainage_from_m) : '';
+    const toKm = parsed.chainage_to_km !== '' ? String(parsed.chainage_to_km) : '';
+    const toM = parsed.chainage_to_m !== '' ? String(parsed.chainage_to_m) : '';
+
     setForm(f => ({
       ...f,
-      activity_code:   p.activity_code                          || f.activity_code,
-      stage:           p.stage                                  || f.stage,
-      chainage_from:   p.chainage_from != null ? formatChainage(p.chainage_from) : f.chainage_from,
-      chainage_to:     p.chainage_to   != null ? formatChainage(p.chainage_to)   : f.chainage_to,
-      road_side:       p.road_side                              || f.road_side,
-      contractor_name: p.contractor_name                        || f.contractor_name,
-      rfi_number:      p.rfi_number    != null ? String(p.rfi_number)            : f.rfi_number,
-      layer_section:   p.layer_section                          || f.layer_section,
-      remarks:         p.remarks                                || f.remarks,
+      work_type:       parsedWorkType || f.work_type,
+      structure_type:  parsedWorkType === 'STRUCTURE' ? f.structure_type : '',
+      layer_code:      layerCode || (parsedWorkType === 'ROAD' ? f.layer_code : ''),
+      element_code:    elementCode || (parsedWorkType === 'STRUCTURE' ? f.element_code : ''),
+      activity_code:   parsedActivity || parsed.activity_code || parsed.activity || f.activity_code,
+      stage:           deriveStageFromSelection({
+        workType: parsedWorkType || f.work_type,
+        layerCode: layerCode || (parsedWorkType === 'ROAD' ? f.layer_code : ''),
+        elementCode: elementCode || (parsedWorkType === 'STRUCTURE' ? f.element_code : ''),
+      }) || f.stage,
+      chainage_from_km: fromKm || f.chainage_from_km,
+      chainage_from_m:  fromM || f.chainage_from_m,
+      chainage_to_km:   toKm || f.chainage_to_km,
+      chainage_to_m:    toM || f.chainage_to_m,
+      chainage_from:    fromKm && fromM ? `${fromKm}+${String(fromM).padStart(3, '0')}` : f.chainage_from,
+      chainage_to:      toKm && toM ? `${toKm}+${String(toM).padStart(3, '0')}` : f.chainage_to,
+      length_m:         parsed.length_m !== '' ? String(parsed.length_m) : f.length_m,
+      width_m:          parsed.width_m !== '' ? String(parsed.width_m) : f.width_m,
+      depth_m:          parsed.depth_m !== '' ? String(parsed.depth_m) : f.depth_m,
+      quantity:         parsed.quantity !== '' ? String(parsed.quantity) : f.quantity,
+      unit:             parsed.unit || f.unit,
+      weather_code:     mapParsedWeatherCode(parsed.weather_code, parsed.remarks) || f.weather_code,
+      progress_status:  mapParsedProgressStatus(parsed.progress_status || parsed.status) || f.progress_status,
+      materials:        Array.isArray(parsed.materials) && parsed.materials.length ? parsed.materials : f.materials,
+      road_side:        parsed.road_side || f.road_side,
+      contractor_name:  parsed.contractor_name || f.contractor_name,
+      rfi_number:       parsed.rfi_number != null ? String(parsed.rfi_number) : f.rfi_number,
+      layer_section:    parsed.layer_section || f.layer_section,
+      remarks:          parsed.remarks || f.remarks,
     }));
   }
 
@@ -133,6 +516,7 @@ export default function CaptureScreen() {
     setTranscript('');
     setTranscriptSrc('local');
     setWhisperStatus('idle');
+    setLiveVoiceSelections({ weather_code: '', progress_status: '' });
     setRecording(true);
 
     // Start expo-av parallel recording (for Whisper upload on stop)
@@ -147,9 +531,19 @@ export default function CaptureScreen() {
       rec.onerror  = (e) => console.log('STT error:', e.error);
       rec.onresult = (event) => {
         const text = Array.from(event.results).map(r => r[0].transcript).join('');
+        const live = detectLiveVoiceSelections(text);
+        setLiveVoiceSelections(live);
+        if (live.weather_code || live.progress_status) {
+          setForm((prev) => ({
+            ...prev,
+            weather_code: live.weather_code || prev.weather_code,
+            progress_status: live.progress_status || prev.progress_status,
+          }));
+        }
         setTranscript(text);
         if (event.results[event.results.length - 1].isFinal) {
           setParsing(true); applyParsed(parseVoiceTranscript(text)); setParsing(false);
+          setLiveVoiceSelections({ weather_code: '', progress_status: '' });
         }
       };
       global._ekk_rec_active = true;
@@ -170,9 +564,9 @@ export default function CaptureScreen() {
     else ExpoSpeechRecognitionModule.stop();
     setRecording(false);
 
-    // Stop expo-av and upload to Whisper if online
+    // AI enhancement should depend on actual connectivity, not manual save mode.
     const audioUri = await stopAudioRecording();
-    if (audioUri && !isOffline) {
+    if (audioUri && effectiveMode === 'online') {
       setWhisperStatus('uploading');
       try {
         const result = await uploadAndTranscribe(audioUri);
@@ -206,20 +600,49 @@ export default function CaptureScreen() {
 
   // ── Build payload ─────────────────────────────────────────────────────────
   function buildPayload(cf, ct) {
+    const stage = deriveStageFromSelection({
+      workType: form.work_type,
+      layerCode: form.layer_code,
+      elementCode: form.element_code,
+    });
     const fp = waypoints[0];
     const lp = waypoints[waypoints.length - 1];
+    const numericQuantity = toNumberOrNull(form.quantity);
+    const numericLength = toNumberOrNull(form.length_m);
+    const numericWidth = toNumberOrNull(form.width_m);
+    const numericDepth = toNumberOrNull(form.depth_m);
+    const derivedLength =
+      typeof cf === 'number' && typeof ct === 'number' && ct > cf
+        ? Math.round((ct - cf) * 1000)
+        : null;
+    const finalLength = numericLength ?? derivedLength;
+    const finalQuantity = quantity ?? numericQuantity ?? finalLength;
+    const finalUnit = form.unit || ((finalQuantity != null && numericWidth != null && numericDepth != null) ? 'CUM' : null);
     return {
       project_id:      form.project_id,
+      work_type:       form.work_type || null,
+      structure_type:  form.structure_type || null,
+      layer_code:      form.layer_code || null,
+      element_code:    form.element_code || null,
       activity_code:   form.activity_code.toUpperCase(),
-      stage:           form.stage.toUpperCase(),
+      stage:           (stage || form.stage || form.work_type || 'MISC').toUpperCase(),
       chainage_from:   cf,
       chainage_to:     ct,
-      quantity_lm:     quantity || Math.round((ct - cf) * 1000),
+      quantity_lm:     finalQuantity,
+      quantity:        finalQuantity,
+      length_m:        finalLength,
+      width_m:         numericWidth,
+      depth_m:         numericDepth,
+      unit:            finalUnit,
+      weather_code:    form.weather_code || null,
+      progress_status: form.progress_status || null,
       contractor_name: form.contractor_name || 'Self',
       road_side:       form.road_side    || null,
       rfi_number:      form.rfi_number && form.rfi_number !== '' ? parseInt(form.rfi_number) : null,
       layer_section:   form.layer_section || null,
-      remarks:         form.remarks       || null,
+      remarks:         form.remarks
+        ? `${form.remarks}${form.materials.length ? ` | materials:${form.materials.join(',')}` : ''}`
+        : (form.materials.length ? `materials:${form.materials.join(',')}` : null),
       entry_date:      toDateString(entryDate),   // ← date picker value
       gps_start_lat:   fp?.lat            || null,
       gps_start_lng:   fp?.lng            || null,
@@ -236,37 +659,54 @@ export default function CaptureScreen() {
     try {
       const resp = await api.post('/api/capture/', payload);
       const entryId = resp.data.id;
-      setLastSaved(resp.data);
+      await addSubmittedEntryId(entryId);
+      setLastSaved({
+        ...resp.data,
+        work_type: payload.work_type,
+        structure_type: payload.structure_type,
+        element_code: payload.element_code,
+        activity_code: payload.activity_code,
+      });
 
       // Start upload in background, then immediately clear form for next entry.
       if (mediaCount > 0) uploadAllForEntry(entryId);
       resetForm();
 
-      Alert.alert(
-        '✅ Saved!',
-        `${resp.data.activity_code} · ${chainageFrom} → ${chainageTo} · ${payload.quantity_lm} LM` +
-        (mediaCount > 0 ? `\nUploading ${mediaCount} media file(s)...` : '')
+      showAlert(
+        'Entry submitted',
+        `${resp.data.activity_code} · ${chainageFrom} → ${chainageTo} · ${payload.quantity_lm ?? 'NA'} ${form.unit || ''}` +
+        (mediaCount > 0 ? `\nUploading ${mediaCount} media file(s) in background...` : '') +
+        '\nYou can view it in My Entries.'
       );
     } catch (e) {
       console.log('Submit failed:', e.message);
-      Alert.alert('Error', 'Failed to submit entry: ' + e.message);
+      showAlert('Error', 'Failed to submit entry: ' + getApiErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }
  
   async function submitCapture() {
-    if (!form.activity_code) { Alert.alert('Missing', 'Select an Activity'); return; }
-    if (!form.stage)         { Alert.alert('Missing', 'Select a Stage');     return; }
+    if (!form.project_id) { showAlert('Missing', 'No project selected for this user'); return; }
+    if (!form.work_type)     { showAlert('Missing', 'Select a Work Type'); return; }
+    if (showLayerSelector && !form.layer_code) { showAlert('Missing', 'Select a Layer'); return; }
+    if (showElementSelector && !form.element_code) { showAlert('Missing', 'Select an Element'); return; }
+    if (!form.activity_code) { showAlert('Missing', 'Select an Activity'); return; }
 
-    const cf = parseChainage(form.chainage_from);
-    const ct = parseChainage(form.chainage_to);
-    if (cf === null || ct === null) { Alert.alert('Invalid chainage', 'Enter as 1+200 format'); return; }
-    if (ct <= cf)                   { Alert.alert('Invalid chainage', 'To must be greater than From'); return; }
+    const cf = buildDecimalFromSplit(form.chainage_from_km, form.chainage_from_m) ?? parseChainage(form.chainage_from);
+    const ct = buildDecimalFromSplit(form.chainage_to_km, form.chainage_to_m) ?? parseChainage(form.chainage_to);
+    if (form.work_type === 'ROAD') {
+      if (cf === null || ct === null) { showAlert('Invalid chainage', 'Enter chainage in Km and M fields'); return; }
+      if (ct <= cf) { showAlert('Invalid chainage', 'To must be greater than From'); return; }
+    }
 
     const payload = buildPayload(cf, ct);
-    const chainageFrom = form.chainage_from;
-    const chainageTo = form.chainage_to;
+    const chainageFrom = form.chainage_from_km && form.chainage_from_m
+      ? `${form.chainage_from_km}+${String(form.chainage_from_m).padStart(3, '0')}`
+      : (form.chainage_from || 'NA');
+    const chainageTo = form.chainage_to_km && form.chainage_to_m
+      ? `${form.chainage_to_km}+${String(form.chainage_to_m).padStart(3, '0')}`
+      : (form.chainage_to || 'NA');
     const mediaCount = photoCount + videoCount + fileCount;
 
     try {
@@ -277,22 +717,25 @@ export default function CaptureScreen() {
         const localId = await enqueueEntry(payload, mediaItems);
         setLastSaved({
           activity_code: payload.activity_code,
+          work_type: payload.work_type,
+          structure_type: payload.structure_type,
+          element_code: payload.element_code,
           created_at: new Date().toISOString(),
           offline: true,
         });
         resetForm();  // Clear form immediately after saving offline
         resetMedia(); // Also clear media since it's stored in queue
-        Alert.alert(
+        showAlert(
           '💾 Saved offline',
-          `${payload.activity_code} · ${form.chainage_from} → ${form.chainage_to}\n${mediaItems.length} media file(s) queued — sync from Settings when online.`,
+          `${payload.activity_code} · ${chainageFrom} → ${chainageTo}\n${mediaItems.length} media file(s) queued — sync from Settings when online.`,
           [{ text: 'OK' }]   // No need for onPress since form is already cleared
         );
         setLoading(false);
       } else {
         // ── Online path: confirm first, then submit ──────────────────────────
-        Alert.alert(
+        showAlert(
           'Submit entry?',
-          `${payload.activity_code} · ${chainageFrom} → ${chainageTo} · ${payload.quantity_lm} LM` +
+          `${payload.activity_code} · ${chainageFrom} → ${chainageTo} · ${payload.quantity_lm ?? 'NA'} ${form.unit || ''}` +
           (mediaCount > 0 ? `\n${mediaCount} media file(s) will upload in background after saving.` : ''),
           [
             { text: 'Cancel', style: 'cancel' },
@@ -306,7 +749,7 @@ export default function CaptureScreen() {
     } catch (e) {
       // ── Error: show message without saving offline ──────────────────────────
       console.log('Submit failed:', e.message);
-      Alert.alert('Error', 'Failed to submit entry: ' + e.message);
+      showAlert('Error', 'Failed to submit entry: ' + getApiErrorMessage(e));
     } finally {
       if (isOffline) setLoading(false);
     }
@@ -315,12 +758,15 @@ export default function CaptureScreen() {
   // ── Reset ─────────────────────────────────────────────────────────────────
   function resetForm() {
     setForm({
-      project_id: PROJECT_ID, activity_code: '', stage: '',
+      project_id: selectedProject?.id || '', work_type: '', structure_type: '', layer_code: '', element_code: '', activity_code: '', stage: '',
+      chainage_from_km: '', chainage_from_m: '', chainage_to_km: '', chainage_to_m: '',
       chainage_from: '', chainage_to: '', road_side: '',
+      length_m: '', width_m: '', depth_m: '', quantity: '', unit: '', weather_code: '', progress_status: '', materials: [],
       contractor_name: 'Self', rfi_number: '', layer_section: '', remarks: '',
     });
     setEntryDate(new Date());
     setQuantity(null); setTranscript(''); setWaypoints([]);
+    setParsedFlags({ is_partial_entry: false, missing_fields: [] });
     resetMedia();
   }
 
@@ -350,7 +796,9 @@ export default function CaptureScreen() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Field Capture</Text>
-          <Text style={styles.subtitle}>M1 · End of Day Entry · Project 613</Text>
+          <Text style={styles.subtitle}>
+            M1 · End of Day Entry · {selectedProject ? `${selectedProject.project_code} - ${selectedProject.name}` : 'No project selected'}
+          </Text>
         </View>
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>🚪</Text>
@@ -373,6 +821,12 @@ export default function CaptureScreen() {
           <Text style={[styles.savedText, lastSaved.offline && { color: '#92400e' }]}>
             {lastSaved.offline ? '💾 Queued: ' : 'Last saved: '}
             {lastSaved.activity_code} · {new Date(lastSaved.created_at).toLocaleTimeString('en-IN')}
+          </Text>
+          <Text style={[styles.savedSubText, lastSaved.offline && { color: '#92400e' }]}>
+            {'Work Type: '}{lastSaved.work_type || '—'}{'  |  '}
+            {'Structure Type: '}{lastSaved.structure_type || '—'}{'  |  '}
+            {'Element: '}{lastSaved.element_code || '—'}{'  |  '}
+            {'Activity: '}{lastSaved.activity_code || '—'}
           </Text>
         </View>
       )}
@@ -432,8 +886,27 @@ export default function CaptureScreen() {
           <View style={styles.transcriptBox}>
             <View style={styles.transcriptHeader}>
               <Text style={styles.transcriptLabel}>Heard</Text>
-              <View style={[styles.sourceBadge, transcriptSrc === 'ai' ? styles.sourceBadgeAI : styles.sourceBadgeLocal]}>
-                <Text style={styles.sourceBadgeText}>{transcriptSrc === 'ai' ? '✨ AI Enhanced' : '📱 Local STT'}</Text>
+              <View
+                style={[
+                  styles.sourceBadge,
+                  transcriptSrc === 'ai'
+                    ? styles.sourceBadgeAI
+                    : whisperStatus === 'error'
+                      ? styles.sourceBadgeWarn
+                      : styles.sourceBadgeLocal,
+                ]}
+              >
+                <Text style={styles.sourceBadgeText}>
+                  {transcriptSrc === 'ai'
+                    ? 'AI processed'
+                    : effectiveMode === 'offline'
+                      ? 'Offline local STT'
+                      : whisperStatus === 'uploading'
+                        ? 'Sending to AI'
+                        : whisperStatus === 'error'
+                          ? 'AI unavailable'
+                          : 'Local STT'}
+                </Text>
               </View>
             </View>
             {whisperStatus === 'uploading' && (
@@ -447,10 +920,30 @@ export default function CaptureScreen() {
             )}
             <Text style={styles.transcriptText}>{transcript}</Text>
             <Text style={[styles.transcriptLabel, { marginTop: 8 }]}>Parsed into form</Text>
+            {parsedFlags.is_partial_entry && (
+              <View style={styles.partialEntryBanner}>
+                <Text style={styles.partialEntryText}>
+                  ⚠ Partial entry — fill in: {parsedFlags.missing_fields.join(', ')}
+                </Text>
+              </View>
+            )}
             <Text style={styles.transcriptText}>
+              {'Work Type: '}{form.work_type || '—'}{'\n'}
+              {'Structure Type: '}{form.structure_type || '—'}{'\n'}
+              {'Layer: '}{form.layer_code || '—'}{'\n'}
+              {'Element: '}{form.element_code || '—'}{'\n'}
               {'Activity: '}{form.activity_code || '—'}{'\n'}
               {'Stage: '}{form.stage || '—'}{'\n'}
-              {'Chainage: '}{form.chainage_from || '—'}{' → '}{form.chainage_to || '—'}{'\n'}
+              {'Chainage: '}
+              {form.chainage_from_km && form.chainage_from_m ? `${form.chainage_from_km}+${String(form.chainage_from_m).padStart(3, '0')}` : '—'}
+              {' → '}
+              {form.chainage_to_km && form.chainage_to_m ? `${form.chainage_to_km}+${String(form.chainage_to_m).padStart(3, '0')}` : '—'}
+              {'\n'}
+              {'L×B×D: '}{form.length_m || '—'}{' × '}{form.width_m || '—'}{' × '}{form.depth_m || '—'}{'\n'}
+              {'Qty: '}{form.quantity || (quantity != null ? String(quantity) : '—')}{' '}{form.unit || ''}{'\n'}
+              {'Weather: '}{form.weather_code || '—'}{'\n'}
+              {'Status: '}{form.progress_status || '—'}{'\n'}
+              {'Materials: '}{form.materials.length ? form.materials.join(', ') : '—'}{'\n'}
               {'Road Side: '}{form.road_side || '—'}{'\n'}
               {'Remarks: '}{form.remarks || '—'}
             </Text>
@@ -569,38 +1062,193 @@ export default function CaptureScreen() {
         )}
       </View>
 
+      <Text style={styles.label}>Work Type</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+        {WORK_TYPES.map((workType) => (
+          <TouchableOpacity
+            key={workType.code}
+            style={[styles.pill, form.work_type === workType.code && styles.pillActive]}
+            onPress={() => updateWorkType(workType.code)}
+          >
+            <Text style={[styles.pillText, form.work_type === workType.code && styles.pillTextActive]}>{workType.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {showLayerSelector && (
+        <>
+          <Text style={styles.label}>Layer</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+            {LAYERS.map((layer) => (
+              <TouchableOpacity
+                key={layer.code}
+                style={[styles.pill, form.layer_code === layer.code && styles.pillActive]}
+                onPress={() => updateLayer(layer.code)}
+              >
+                <Text style={[styles.pillText, form.layer_code === layer.code && styles.pillTextActive]}>{layer.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {showElementSelector && (
+        <>
+          <Text style={styles.label}>Structure Type</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+            {STRUCTURE_TYPES.map((type) => (
+              <TouchableOpacity
+                key={type.code}
+                style={[styles.pill, form.structure_type === type.code && styles.pillActive]}
+                onPress={() => updateStructureType(type.code)}
+              >
+                <Text style={[styles.pillText, form.structure_type === type.code && styles.pillTextActive]}>{type.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <Text style={styles.label}>Element</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+            {availableElements.map((element) => (
+              <TouchableOpacity
+                key={element.code}
+                style={[styles.pill, form.element_code === element.code && styles.pillActive]}
+                onPress={() => updateElement(element.code)}
+              >
+                <Text style={[styles.pillText, form.element_code === element.code && styles.pillTextActive]}>{element.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
       {/* Activity */}
       <Text style={styles.label}>Activity</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-        {ACTIVITY_CODES.map(a => (
-          <TouchableOpacity key={a.code} style={[styles.pill, form.activity_code === a.code && styles.pillActive]} onPress={() => update('activity_code', a.code)}>
-            <Text style={[styles.pillText, form.activity_code === a.code && styles.pillTextActive]}>{a.code}</Text>
-            <Text style={[styles.pillSub,  form.activity_code === a.code && styles.pillSubActive]}>{a.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Stage */}
-      <Text style={styles.label}>Stage / Layer</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-        {STAGES.map(s => (
-          <TouchableOpacity key={s.code} style={[styles.pill, form.stage === s.code && styles.pillActive]} onPress={() => update('stage', s.code)}>
-            <Text style={[styles.pillText, form.stage === s.code && styles.pillTextActive]}>{s.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {!canChooseActivity && (
+        <Text style={styles.helperText}>
+          {form.work_type === 'ROAD'
+            ? 'Select a layer to see matching road activities.'
+            : form.work_type === 'STRUCTURE'
+              ? 'Select structure type and element to see structure activities.'
+              : 'Select a work type to continue.'}
+        </Text>
+      )}
+      {canChooseActivity && availableActivities.length === 0 && (
+        <Text style={styles.helperText}>No activities are mapped for this selection yet.</Text>
+      )}
+      {canChooseActivity && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+          {availableActivities.map((activity) => (
+            <TouchableOpacity
+              key={activity.code}
+              style={[styles.pill, form.activity_code === activity.code && styles.pillActive]}
+              onPress={() => updateActivity(activity.code)}
+            >
+              <Text style={[styles.pillText, form.activity_code === activity.code && styles.pillTextActive]}>{activity.code}</Text>
+              <Text style={[styles.pillSub, form.activity_code === activity.code && styles.pillSubActive]}>{activity.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Chainage */}
-      <Text style={styles.label}>Chainage</Text>
-      <View style={styles.chainageRow}>
-        <TextInput style={[styles.input, styles.chainageInput]} value={form.chainage_from} onChangeText={v => update('chainage_from', v)} placeholder="1+200" />
-        <Text style={styles.chainageSep}>→</Text>
-        <TextInput style={[styles.input, styles.chainageInput]} value={form.chainage_to}   onChangeText={v => update('chainage_to',   v)} placeholder="1+450" />
+      <Text style={styles.label}>Chainage (Km + M)</Text>
+      <View style={styles.twoColCompact}>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>From Km</Text>
+          <TextInput
+            style={[styles.input, styles.compactInput]}
+            value={form.chainage_from_km}
+            onChangeText={v => onChainageFieldChange('chainage_from_km', v)}
+            placeholder="45"
+            placeholderTextColor="#c7c2c2"
+            keyboardType="numeric"
+          />
+        </View>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>From M</Text>
+          <TextInput
+            style={[styles.input, styles.compactInput]}
+            value={form.chainage_from_m}
+            onChangeText={v => onChainageFieldChange('chainage_from_m', v)}
+            placeholder="100"
+            placeholderTextColor="#c7c2c2"
+            keyboardType="numeric"
+          />
+        </View>
       </View>
+      <View style={styles.twoColCompact}>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>To Km</Text>
+          <TextInput
+            style={[styles.input, styles.compactInput]}
+            value={form.chainage_to_km}
+            onChangeText={v => onChainageFieldChange('chainage_to_km', v)}
+            placeholder="46"
+            placeholderTextColor="#c7c2c2"
+            keyboardType="numeric"
+          />
+        </View>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>To M</Text>
+          <TextInput
+            style={[styles.input, styles.compactInput]}
+            value={form.chainage_to_m}
+            onChangeText={v => onChainageFieldChange('chainage_to_m', v)}
+            placeholder="600"
+            placeholderTextColor="#c7c2c2"
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+
+      <Text style={styles.label}>Dimensions (Manual or Parsed)</Text>
+      <View style={styles.threeColCompact}>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>Length m</Text>
+          <TextInput style={[styles.input, styles.compactInput]} value={form.length_m} onChangeText={v => update('length_m', v)} placeholder="1500" placeholderTextColor="#c7c2c2" keyboardType="decimal-pad" />
+        </View>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>Width m</Text>
+          <TextInput style={[styles.input, styles.compactInput]} value={form.width_m} onChangeText={v => update('width_m', v)} placeholder="7" placeholderTextColor="#c7c2c2" keyboardType="decimal-pad" />
+        </View>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>Depth m</Text>
+          <TextInput style={[styles.input, styles.compactInput]} value={form.depth_m} onChangeText={v => update('depth_m', v)} placeholder="0.2" placeholderTextColor="#c7c2c2" keyboardType="decimal-pad" />
+        </View>
+      </View>
+
+      <View style={styles.twoColCompact}>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>Quantity</Text>
+          <TextInput
+            style={[styles.input, styles.compactInput]}
+            value={form.quantity}
+            onChangeText={v => update('quantity', v)}
+            placeholder={quantity != null ? String(quantity) : 'Auto'}
+            placeholderTextColor="#c7c2c2"
+            keyboardType="decimal-pad"
+          />
+        </View>
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>Unit</Text>
+          <TextInput style={[styles.input, styles.compactInput]} value={form.unit} onChangeText={v => update('unit', v.toUpperCase())} placeholder="CUM / TON / KG" placeholderTextColor="#c7c2c2" />
+        </View>
+      </View>
+
+      {form.materials.length > 0 && (
+        <View style={styles.materialWrap}>
+          {form.materials.map((mat) => (
+            <View key={mat} style={styles.materialChip}>
+              <Text style={styles.materialChipText}>{mat}</Text>
+            </View>
+          ))}
+        </View>
+      )}
       {quantity !== null && (
         <View style={styles.qtyCard}>
           <Text style={styles.qtyVal}>{quantity.toLocaleString()}</Text>
-          <Text style={styles.qtyUnit}> linear metres</Text>
+          <Text style={styles.qtyUnit}> {form.unit || 'auto unit'}</Text>
         </View>
       )}
 
@@ -610,6 +1258,32 @@ export default function CaptureScreen() {
         {ROAD_SIDES.map(rs => (
           <TouchableOpacity key={rs} style={[styles.rsBtn, form.road_side === rs && styles.rsBtnActive]} onPress={() => update('road_side', rs)}>
             <Text style={[styles.rsBtnText, form.road_side === rs && styles.rsBtnTextActive]}>{rs}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={styles.label}>Weather</Text>
+      <View style={styles.rsRow}>
+        {WEATHER_OPTIONS.map((option) => (
+          <TouchableOpacity
+            key={option.value}
+            style={[styles.rsBtn, (form.weather_code === option.value || liveVoiceSelections.weather_code === option.value) && styles.rsBtnActive]}
+            onPress={() => update('weather_code', option.value)}
+          >
+            <Text style={[styles.rsBtnText, (form.weather_code === option.value || liveVoiceSelections.weather_code === option.value) && styles.rsBtnTextActive]}>{option.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={styles.label}>Status</Text>
+      <View style={styles.rsRow}>
+        {PROGRESS_STATUS_OPTIONS.map((option) => (
+          <TouchableOpacity
+            key={option.value}
+            style={[styles.rsBtn, (form.progress_status === option.value || liveVoiceSelections.progress_status === option.value) && styles.rsBtnActive]}
+            onPress={() => update('progress_status', option.value)}
+          >
+            <Text style={[styles.rsBtnText, (form.progress_status === option.value || liveVoiceSelections.progress_status === option.value) && styles.rsBtnTextActive]}>{option.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -635,10 +1309,14 @@ export default function CaptureScreen() {
       <TextInput style={[styles.input, styles.remarks]} value={form.remarks} onChangeText={v => update('remarks', v)} placeholder="Weather, delays, issues..." multiline numberOfLines={3} />
 
       {/* Submit */}
-      <TouchableOpacity style={[styles.submitBtn, isOffline && styles.submitBtnOffline, loading && { opacity: 0.6 }]} onPress={submitCapture} disabled={loading}>
+      <TouchableOpacity
+        style={[styles.submitBtn, isOffline && styles.submitBtnOffline, (loading || networkLoading) && { opacity: 0.6 }]}
+        onPress={submitCapture}
+        disabled={loading || networkLoading}
+      >
         {loading
           ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.submitText}>{isOffline ? '💾 Save Offline' : 'Submit Capture Entry'}</Text>
+          : <Text style={styles.submitText}>{networkLoading ? 'Checking network mode...' : isOffline ? '💾 Save Offline' : 'Submit Capture Entry'}</Text>
         }
       </TouchableOpacity>
 
@@ -660,6 +1338,7 @@ const styles = StyleSheet.create({
   offlineBannerText:{ fontSize: 12, color: '#f59e0b', fontWeight: '500' },
   savedBanner:      { backgroundColor: '#e8f5e9', padding: 10, paddingHorizontal: 16 },
   savedText:        { fontSize: 12, color: '#2e7d32', fontWeight: '500' },
+  savedSubText:     { fontSize: 11, color: '#2e7d32', marginTop: 2 },
   section:          { marginHorizontal: 16, marginTop: 8 },
   label:            { fontSize: 11, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: 16, marginTop: 16, marginBottom: 8 },
   // Date picker
@@ -682,10 +1361,13 @@ const styles = StyleSheet.create({
   sourceBadge:      { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
   sourceBadgeLocal: { backgroundColor: '#f0f0f0' },
   sourceBadgeAI:    { backgroundColor: '#ede9fe' },
+  sourceBadgeWarn:  { backgroundColor: '#fee2e2' },
   sourceBadgeText:  { fontSize: 10, fontWeight: '600', color: '#555' },
   whisperRow:       { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   whisperText:      { fontSize: 11, color: '#7c3aed', fontWeight: '500', flex: 1 },
   whisperError:     { fontSize: 11, color: '#dc2626', marginBottom: 6 },
+  partialEntryBanner: { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: '#d97706' },
+  partialEntryText:   { fontSize: 12, color: '#92400e', fontWeight: '600' },
   // GPS
   pinBtn:           { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#e0e0e0' },
   pinIcon:          { fontSize: 22 },
@@ -729,10 +1411,19 @@ const styles = StyleSheet.create({
   pillTextActive:   { color: '#fff' },
   pillSub:          { fontSize: 10, color: '#aaa', marginTop: 2 },
   pillSubActive:    { color: '#888' },
+  helperText:       { fontSize: 12, color: '#666', marginHorizontal: 16, marginBottom: 4 },
   input:            { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 10, padding: 12, fontSize: 15, marginHorizontal: 16, color: '#1a1a1a', marginBottom: 4 },
   chainageRow:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8 },
   chainageInput:    { flex: 1, marginHorizontal: 0 },
   chainageSep:      { fontSize: 20, color: '#bbb' },
+  twoColCompact:    { flexDirection: 'row', gap: 8, paddingHorizontal: 16 },
+  threeColCompact:  { flexDirection: 'row', gap: 8, paddingHorizontal: 16 },
+  compactCol:       { flex: 1 },
+  compactHint:      { fontSize: 11, color: '#777', marginBottom: 4, marginHorizontal: 2 },
+  compactInput:     { marginHorizontal: 0, paddingVertical: 9, fontSize: 14 },
+  materialWrap:     { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginTop: 6 },
+  materialChip:     { backgroundColor: '#111827', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 },
+  materialChipText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   qtyCard:          { flexDirection: 'row', alignItems: 'baseline', marginHorizontal: 16, marginTop: 8, padding: 12, backgroundColor: '#e8f5e9', borderRadius: 8 },
   qtyVal:           { fontSize: 24, fontWeight: '700', color: '#2e7d32' },
   qtyUnit:          { fontSize: 13, color: '#4caf50' },

@@ -3,10 +3,11 @@
     "name": "ekk-mobile",
     "slug": "ekk-mobile",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -46,7 +47,7 @@
       "expo-audio",
       "expo-speech-recognition",
       "@react-native-community/datetimepicker",
-      "react-native-image-marker"
+      "expo-asset"
     ],
     "extra": {
       "eas": {

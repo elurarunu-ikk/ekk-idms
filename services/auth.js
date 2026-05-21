@@ -1,4 +1,5 @@
 import api from './api';
+import { clearSession, getStoredSession, saveSession } from './session';
 
 const isWeb = typeof localStorage !== 'undefined';
 
@@ -119,6 +120,7 @@ export async function login(email, password) {
     { headers: { 'Content-Type': 'application/json' } }
   );
   await cacheCredentials(email, password, resp.data.access_token);
+  await saveSession(resp.data.session);
   return resp.data;
 }
 
@@ -143,14 +145,20 @@ export async function tryOfflineLogin(email, password) {
     throw new Error('Incorrect email or password.');
   }
 
+  const session = await getStoredSession();
+  if (!session) {
+    throw new Error('No cached project session found. Please sign in online once.');
+  }
+
   // Restore active token so API calls work once network returns
   await secureSet('ekk_token', offlineToken);
 
-  return { access_token: offlineToken, offline: true };
+  return { access_token: offlineToken, offline: true, session };
 }
 
 export async function logout() {
   await secureDel('ekk_token');
+  await clearSession();
 }
 
 export async function getToken() {

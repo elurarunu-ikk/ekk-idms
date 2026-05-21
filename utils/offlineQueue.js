@@ -3,11 +3,109 @@
 import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  ACTIVITIES,
+  LAYERS,
+  STRUCTURE_TYPES,
+  STRUCTURE_ELEMENT_ACTIVITY_MAP,
+} from '../constants/data';
 
 const QUEUE_KEY = 'ekk_offline_queue';
 const MODE_KEY  = 'ekk_network_mode';
 const RETRY_QUEUE_KEY = 'ekk_media_retry_queue';
+const SUBMITTED_ENTRY_IDS_KEY = 'ekk_submitted_entry_ids';
 const SQLITE_MIGRATION_KEY = 'ekk_sqlite_migrated_v1';
+const QUEUE_METADATA_MIGRATION_KEY = 'ekk_queue_metadata_migrated_v2';
+
+const WORK_TYPE_ORDER = ['ROAD', 'STRUCTURE', 'DRAIN', 'ANCILLARY', 'MISC'];
+const LAYER_CODE_SET = new Set(LAYERS.map((layer) => layer.code));
+const STRUCTURE_ELEMENT_SET = new Set(
+  Object.values(STRUCTURE_ELEMENT_ACTIVITY_MAP).flatMap((elementMap) => Object.keys(elementMap))
+);
+
+const modeListeners = new Set();
+
+function inferWorkType(stageCode, activityCode) {
+  if (LAYER_CODE_SET.has(stageCode)) return 'ROAD';
+  if (STRUCTURE_ELEMENT_SET.has(stageCode)) return 'STRUCTURE';
+  if (['DRAIN', 'ANCILLARY', 'MISC'].includes(stageCode)) return stageCode;
+
+  const activity = ACTIVITIES.find((item) => item.code === activityCode);
+  if (!activity) return '';
+
+  for (const workType of WORK_TYPE_ORDER) {
+    if (activity.workTypes.includes(workType)) return workType;
+  }
+
+  return '';
+}
+
+function inferStructureTypeSafe(elementCode, activityCode) {
+  if (!elementCode) return '';
+
+  const candidates = STRUCTURE_TYPES.filter((type) => {
+    const mappedActivities = STRUCTURE_ELEMENT_ACTIVITY_MAP[type.code]?.[elementCode] || [];
+    if (!mappedActivities.length) return false;
+    return !activityCode || mappedActivities.includes(activityCode);
+  });
+
+  return candidates.length === 1 ? candidates[0].code : '';
+}
+
+function enrichLegacyPayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const next = { ...payload };
+  const stageCode = next.stage || '';
+  const activityCode = next.activity_code || '';
+
+  const workType = next.work_type || inferWorkType(stageCode, activityCode);
+  if (workType && !next.work_type) next.work_type = workType;
+
+  if (workType === 'ROAD' && !next.layer_code && LAYER_CODE_SET.has(stageCode)) {
+    next.layer_code = stageCode;
+  }
+
+  if (workType === 'STRUCTURE' && !next.element_code && STRUCTURE_ELEMENT_SET.has(stageCode)) {
+    next.element_code = stageCode;
+  }
+
+  if (workType === 'STRUCTURE' && !next.structure_type) {
+    const inferred = inferStructureTypeSafe(next.element_code || stageCode, activityCode);
+    if (inferred) next.structure_type = inferred;
+  }
+
+  return next;
+}
+
+async function runQueueMetadataMigrationOnce() {
+  const migrationDone = await getRaw(QUEUE_METADATA_MIGRATION_KEY);
+  if (migrationDone === '1') return;
+
+  let queue = [];
+  try {
+    const raw = await getRaw(QUEUE_KEY);
+    queue = raw ? JSON.parse(raw) : [];
+  } catch {
+    queue = [];
+  }
+
+  if (Array.isArray(queue) && queue.length > 0) {
+    let changed = false;
+    const migrated = queue.map((item) => {
+      if (!item?.payload || typeof item.payload !== 'object') return item;
+      const nextPayload = enrichLegacyPayload(item.payload);
+      if (JSON.stringify(nextPayload) !== JSON.stringify(item.payload)) changed = true;
+      return changed ? { ...item, payload: nextPayload } : item;
+    });
+
+    if (changed) {
+      await setRaw(QUEUE_KEY, JSON.stringify(migrated));
+    }
+  }
+
+  await setRaw(QUEUE_METADATA_MIGRATION_KEY, '1');
+}
 
 let dbPromise = null;
 let readyPromise = null;
@@ -88,11 +186,25 @@ export async function getMode() {
 
 export async function setMode(mode) {
   await setRaw(MODE_KEY, mode);
+  for (const listener of modeListeners) {
+    try {
+      listener(mode);
+    } catch {
+      // Ignore listener errors to avoid breaking mode persistence.
+    }
+  }
+}
+
+export function subscribeModeChange(listener) {
+  if (typeof listener !== 'function') return () => {};
+  modeListeners.add(listener);
+  return () => modeListeners.delete(listener);
 }
 
 // ── Queue ops ─────────────────────────────────────────────────────────────────
 export async function loadQueue() {
   try {
+    await runQueueMetadataMigrationOnce();
     const raw = await getRaw(QUEUE_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
@@ -159,4 +271,25 @@ export async function loadRetryQueue() {
 
 export async function saveRetryQueue(queue) {
   await setRaw(RETRY_QUEUE_KEY, JSON.stringify(queue));
+}
+
+// ── Submitted online entries ────────────────────────────────────────────────
+export async function loadSubmittedEntryIds() {
+  try {
+    const raw = await getRaw(SUBMITTED_ENTRY_IDS_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.map((id) => String(id)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addSubmittedEntryId(entryId) {
+  if (!entryId) return [];
+
+  const normalizedId = String(entryId);
+  const currentIds = await loadSubmittedEntryIds();
+  const nextIds = [normalizedId, ...currentIds.filter((id) => id !== normalizedId)].slice(0, 100);
+  await setRaw(SUBMITTED_ENTRY_IDS_KEY, JSON.stringify(nextIds));
+  return nextIds;
 }

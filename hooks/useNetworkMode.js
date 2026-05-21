@@ -4,7 +4,20 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import NetInfo from '@react-native-community/netinfo';
-import { getMode, setMode } from '../utils/offlineQueue';
+import { getMode, setMode, subscribeModeChange } from '../utils/offlineQueue';
+import { API_BASE } from '../services/api';
+
+async function canReachApiHealth(timeoutMs = 2500) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(`${API_BASE}/health`, { method: 'GET', signal: ctrl.signal });
+    clearTimeout(timer);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Returns:
@@ -29,15 +42,45 @@ export function useNetworkMode() {
     });
   }, []);
 
+  // Keep all screen instances in sync when mode changes anywhere in app.
+  useEffect(() => {
+    const unsubscribe = subscribeModeChange((mode) => {
+      setManualMode(mode);
+      setNetworkLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
   // Listen for real network changes
   useEffect(() => {
+    const applyConnectivity = async (state) => {
+      const hasLink = !!state?.isConnected;
+      const internetReachable = state?.isInternetReachable !== false;
+
+      if (hasLink && internetReachable) {
+        setIsConnected(true);
+        return;
+      }
+
+      // On some field networks/captive setups, internet check fails but LAN API is reachable.
+      if (hasLink) {
+        const apiReachable = await canReachApiHealth();
+        setIsConnected(apiReachable);
+        return;
+      }
+
+      setIsConnected(false);
+    };
+
     const unsub = NetInfo.addEventListener(state => {
-      setIsConnected(!!state.isConnected && !!state.isInternetReachable);
+      void applyConnectivity(state);
     });
+
     // Get current state immediately
     NetInfo.fetch().then(state => {
-      setIsConnected(!!state.isConnected && !!state.isInternetReachable);
+      void applyConnectivity(state);
     });
+
     return unsub;
   }, []);
 
@@ -46,8 +89,11 @@ export function useNetworkMode() {
     await setMode(newMode);
   }, []);
 
-  // Effective mode — what the app actually uses
-  const effectiveMode = (manualMode === 'offline' || !isConnected) ? 'offline' : 'online';
+  // Effective mode — what the app actually uses.
+  // While loading saved preference, default to offline to avoid accidental online submissions.
+  const effectiveMode = networkLoading
+    ? 'offline'
+    : (manualMode === 'offline' || !isConnected) ? 'offline' : 'online';
 
   // Why offline — for showing the right message to user
   const offlineReason = !isConnected
