@@ -11,6 +11,8 @@ import Report from './pages/Report';
 import CompanyMaster from './pages/CompanyMaster';
 import ProjectMaster from './pages/ProjectMaster';
 import UserManagement from './pages/UserManagement';
+import GradeSheetImport from './pages/GradeSheetImport';
+import ReferenceDataPage from './pages/ReferenceDataPage';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -45,6 +47,8 @@ const App = () => {
         <Route path="companies" element={<CompanyMaster />} />
         <Route path="projects" element={<ProjectMaster />} />
         <Route path="users" element={<UserManagement />} />
+        <Route path="grade-sheet" element={<GradeSheetImport />} />
+        <Route path="reference-data" element={<ReferenceDataPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

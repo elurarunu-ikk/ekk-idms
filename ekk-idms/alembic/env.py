@@ -10,6 +10,12 @@ from database import Base
 from models.site_data import SiteDataTransaction
 from models.media import EntryMedia
 from models.plan_data import PlanData
+from models.project_layer_config import ProjectLayerConfig
+from models.project_gradient_config import ProjectGradientConfig
+from models.level_register import LevelRegister
+from models.ogl import OGL
+from models.gps_coordinates import GPSCoordinates
+from models.ogl_analysis import OGLAnalysis
 
 # ── Alembic Config ────────────────────────────────────────────────────────────
 config = context.config

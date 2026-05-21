@@ -171,6 +171,58 @@ export const getDashboardStats = async (projectId) => {
   };
 };
 
+// Reference Data — Grade Sheet
+export const uploadGradeSheet = (projectId, file) => {
+  const form = new FormData();
+  form.append('project_id', projectId);
+  form.append('file', file);
+  return api
+    .post('/reference-data/upload-grade-sheet', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    .then((r) => r.data);
+};
+
+export const getLevelRegisterSummary = (projectId) =>
+  api
+    .get('/level-register/summary/', { params: { project_id: projectId } })
+    .then((r) => r.data);
+
+export const listLevelRegister = (params) =>
+  api.get('/level-register/', { params }).then((r) => r.data);
+
+export const listOGL = (params) =>
+  api.get('/ogl/', { params }).then((r) => r.data);
+
+export const listOGLAnalysisPaged = (params) =>
+  api.get('/ogl/analysis/paged/', { params }).then((r) => r.data);
+
+export const listGPS = (params) =>
+  api.get('/gps/', { params }).then((r) => r.data);
+
+export const downloadLevelRegister = (projectId, layerCode = null) => {
+  const params = { project_id: projectId };
+  if (layerCode) params.layer_code = layerCode;
+  return api
+    .get('/level-register/download/', { params, responseType: 'blob' })
+    .then((r) => r.data);
+};
+
+export const downloadOGL = (projectId) =>
+  api
+    .get('/ogl/download/', { params: { project_id: projectId }, responseType: 'blob' })
+    .then((r) => r.data);
+
+export const downloadOGLAnalysis = (projectId) =>
+  api
+    .get('/ogl/analysis/download/', { params: { project_id: projectId }, responseType: 'blob' })
+    .then((r) => r.data);
+
+export const downloadGPS = (projectId) =>
+  api
+    .get('/gps/download/', { params: { project_id: projectId }, responseType: 'blob' })
+    .then((r) => r.data);
+
 export const getChatStarters = (projectId) =>
   api
     .get('/chat/starters', { params: { project_id: projectId } })

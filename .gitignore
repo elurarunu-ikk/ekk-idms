@@ -53,3 +53,11 @@ App_activation.txt
 # EAS build artifacts
 *.jks
 *.keystore
+
+# Database dumps
+*.dump
+*.sql.gz
+
+# Python virtual environment
+venv/
+.venv/

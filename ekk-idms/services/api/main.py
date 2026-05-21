@@ -61,6 +61,19 @@ app.include_router(whatsapp_router.router,     prefix="/api/whatsapp",     tags=
 app.include_router(voice_router,  prefix="/api/voice",  tags=["Voice AI"])
 app.include_router(media_router,  prefix="/api/media",  tags=["media"])
 app.include_router(chat_router,   prefix="/chat",       tags=["AI Chat"])
+
+from routers.project_config_router import router as project_config_router
+app.include_router(project_config_router, prefix="/project-config", tags=["Project Config"])
+
+from routers.grade_sheet_router    import router as grade_sheet_router
+from routers.level_register_router import router as level_register_router
+from routers.ogl_router            import router as ogl_router
+from routers.gps_router            import router as gps_router
+
+app.include_router(grade_sheet_router,    prefix="/reference-data", tags=["Reference Data"])
+app.include_router(level_register_router, prefix="/level-register",  tags=["Level Register"])
+app.include_router(ogl_router,            prefix="/ogl",             tags=["OGL"])
+app.include_router(gps_router,            prefix="/gps",             tags=["GPS"])
 app.mount("/media", StaticFiles(directory="media_uploads"), name="media")
 
 @app.get("/health", tags=["System"])
