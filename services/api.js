@@ -4,7 +4,6 @@ import { Platform, NativeModules } from 'react-native';
 import Constants from 'expo-constants';
 
 const PUBLIC_API_BASE = 'https://pray-fur-hart-favourite.trycloudflare.com';
-
 function hostFromUri(raw) {
   if (!raw || typeof raw !== 'string') return '';
   try {
@@ -31,21 +30,57 @@ function detectRuntimeHost() {
   return '';
 }
 
+// defaultPort: '80' for native (nginx), '8000' for web dev (direct API)
+function normalizeApiBase(rawBase, defaultPort = '80', fallbackProtocol = 'http') {
+  if (!rawBase || typeof rawBase !== 'string') return '';
+
+  const trimmed = rawBase.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+
+  const addPort = (parsed) => {
+    if (!parsed.port && /^https?:$/.test(parsed.protocol)) {
+      parsed.port = defaultPort;
+    }
+    return parsed.toString().replace(/\/+$/, '');
+  };
+
+  try {
+    return addPort(new URL(trimmed));
+  } catch {
+    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+      ? trimmed
+      : `${fallbackProtocol}://${trimmed}`;
+    try {
+      return addPort(new URL(withProtocol));
+    } catch {
+      return '';
+    }
+  }
+}
+
 function resolveApiBase() {
   if (Platform.OS === 'web') {
     const webHost = typeof window !== 'undefined' ? window.location.hostname : '';
+
     if (webHost.endsWith('.trycloudflare.com')) {
-      // External testers on mobile must call the public API URL, not localhost.
       return PUBLIC_API_BASE;
     }
 
-    const envWebBase = process.env.EXPO_PUBLIC_WEB_API_BASE?.trim() || process.env.EXPO_PUBLIC_API_BASE?.trim();
+    // Explicit override (e.g. EXPO_PUBLIC_WEB_API_BASE=http://myserver.local)
+    const envWebBase = normalizeApiBase(process.env.EXPO_PUBLIC_WEB_API_BASE, '8000');
     if (envWebBase) return envWebBase;
+
+    // Dynamic: mirror the browser's host, hit port 8000 directly (same machine, no firewall).
+    if (webHost && webHost !== '127.0.0.1') {
+      return `http://${webHost}:8000`;
+    }
 
     return 'http://localhost:8000';
   }
 
-  const envBase = process.env.EXPO_PUBLIC_API_BASE?.trim();
+  // Native (Android/iOS) — always go through nginx on port 80.
+  // Port 8000 (direct API) is not reachable from other LAN devices on Mac/Docker Desktop.
+  const envBase = normalizeApiBase(process.env.EXPO_PUBLIC_API_BASE, '80');
   if (envBase) return envBase;
 
   if (!__DEV__) {
@@ -54,12 +89,11 @@ function resolveApiBase() {
 
   const host = detectRuntimeHost();
   if (host && host !== 'localhost' && host !== '127.0.0.1') {
-    return `http://${host}:8000`;
+    return `http://${host}`;  // port 80 via nginx
   }
 
-  // Fallback for phone/LAN if runtime host cannot be detected.
-  //return 'http://192.168.0.102:8000';
-  return 'http://192.168.1.242:8000';
+  // Fallback for native APK/phone if runtime host cannot be detected.
+  return 'http://192.168.1.22';  // port 80 via nginx
 }
 
 export const API_BASE = resolveApiBase();

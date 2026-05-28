@@ -8,7 +8,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useNetworkMode } from '../hooks/useNetworkMode';
 import { logout } from '../services/auth';
-import { getAccessibleProjects, getSelectedProjectId, setSelectedProjectId } from '../services/session';
+import { getAccessibleProjects, getSelectedProjectId, setSelectedProjectId, getSttLang, setSttLang, STT_LANGUAGES } from '../services/session';
 import { loadQueue, removeFromQueue, markFailed } from '../utils/offlineQueue';
 import api, { API_BASE, getApiErrorMessage } from '../services/api';
 
@@ -46,6 +46,7 @@ export default function SettingsScreen() {
   const [syncLog, setSyncLog] = useState([]);
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectIdState] = useState('');
+  const [sttLang, setSttLangState] = useState('en-IN');
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -58,8 +59,15 @@ export default function SettingsScreen() {
   async function refreshProjects() {
     const available = await getAccessibleProjects();
     const selected = await getSelectedProjectId();
+    const lang = await getSttLang();
     setProjects(available);
     setSelectedProjectIdState(selected);
+    setSttLangState(lang);
+  }
+
+  async function handleSttLangChange(code) {
+    await setSttLang(code);
+    setSttLangState(code);
   }
 
   async function handleProjectChange(projectId) {
@@ -245,6 +253,27 @@ export default function SettingsScreen() {
         </>
       )}
 
+      {/* Voice Language */}
+      <Text style={styles.sectionLabel}>Voice Language (STT)</Text>
+      <View style={styles.card}>
+        <Text style={styles.langNote}>
+          Used for real-time speech recognition while speaking. Whisper AI (online) auto-detects any language regardless of this setting.
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+          {STT_LANGUAGES.map(lang => (
+            <TouchableOpacity
+              key={lang.code}
+              style={[styles.langChip, sttLang === lang.code && styles.langChipActive]}
+              onPress={() => void handleSttLangChange(lang.code)}
+            >
+              <Text style={[styles.langChipText, sttLang === lang.code && styles.langChipTextActive]}>
+                {lang.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       {/* Offline queue summary */}
       <Text style={styles.sectionLabel}>
         Offline Queue {queue.length > 0 ? `(${pendingCount} pending)` : ''}
@@ -351,4 +380,9 @@ const styles = StyleSheet.create({
   queueOverviewText: { fontSize: 12, color: '#0277bd', lineHeight: 18, marginBottom: 6 },
   signOutBtn: { margin: 16, marginTop: 24, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#dc2626', alignItems: 'center' },
   signOutText: { color: '#dc2626', fontWeight: '600', fontSize: 15 },
+  langNote: { fontSize: 12, color: '#888', marginBottom: 10, lineHeight: 17 },
+  langChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff' },
+  langChipActive: { backgroundColor: '#1a1a1a', borderColor: '#1a1a1a' },
+  langChipText: { fontSize: 13, fontWeight: '600', color: '#555' },
+  langChipTextActive: { color: '#fff' },
 });

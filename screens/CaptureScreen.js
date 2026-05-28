@@ -13,8 +13,8 @@ import { addSubmittedEntryId, enqueueEntry } from '../utils/offlineQueue';
 import { formatLocationText } from '../utils/gpsOverlay';
 import { startAudioRecording, stopAudioRecording, uploadAndTranscribe } from '../utils/whisperVoice';
 import { logout } from '../services/auth';
-import api, { getApiErrorMessage } from '../services/api';
-import { getSelectedProject } from '../services/session';
+import api, { getApiErrorMessage, API_BASE } from '../services/api';
+import { getSelectedProject, getSttLang, STT_LANGUAGES } from '../services/session';
 import {
   WORK_TYPES,
   LAYERS,
@@ -28,7 +28,13 @@ import {
   deriveStageFromSelection,
 } from '../constants/data';
 
-const STT_LANG   = 'en-IN';
+const MACHINE_CODES = [
+  'ROLLER', 'PAVER', 'COMPACTOR', 'EXCAVATOR', 'TIPPER',
+  'GRADER', 'TRANSIT_MIXER', 'CONCRETE_PUMP', 'CRANE', 'LOADER', 'OTHER',
+];
+const MATERIAL_UNITS = ['CUM', 'MT', 'KG', 'BAG', 'NOS', 'LM', 'LTR', 'SQM', 'TON'];
+const SHIFT_TYPES = ['DAY', 'NIGHT'];
+
 const WEATHER_OPTIONS = [
   { label: 'Sunny', value: 'SUNNY' },
   { label: 'Cloudy', value: 'CLOUDY' },
@@ -234,11 +240,28 @@ export default function CaptureScreen() {
   const [transcript, setTranscript] = useState('');
   const [parsing,       setParsing]       = useState(false);
   const [whisperStatus,  setWhisperStatus]  = useState('idle');   // idle | uploading | done | error
+  const [whisperError,   setWhisperError]   = useState('');
   const [transcriptSrc,  setTranscriptSrc]  = useState('local');  // local | ai
   const [liveVoiceSelections, setLiveVoiceSelections] = useState({ weather_code: '', progress_status: '' });
   const [parsedFlags,    setParsedFlags]    = useState({ is_partial_entry: false, missing_fields: [] });
   const [waypoints,  setWaypoints]  = useState([]);
   const [lastSaved,  setLastSaved]  = useState(null);
+
+  // ── 3M Resources ──────────────────────────────────────────────────────────
+  const [sttLang,         setSttLangState]     = useState('en-IN');
+  const [show3M,          setShow3M]          = useState(false);
+  const [materialsUsed,   setMaterialsUsed]   = useState([]);
+  const [machinesDeployed,setMachinesDeployed] = useState([]);
+  const [manpowerDeployed,setManpowerDeployed] = useState([]);
+  const [mpCategories,    setMpCategories]    = useState([]);
+
+  const [addingMat,    setAddingMat]    = useState(false);
+  const [addingMach,   setAddingMach]   = useState(false);
+  const [addingMp,     setAddingMp]     = useState(false);
+
+  const [newMat,  setNewMat]  = useState({ code: '', qty: '', unit: 'CUM', source: '' });
+  const [newMach, setNewMach] = useState({ code: 'ROLLER', hours: '', operator: '' });
+  const [newMp,   setNewMp]   = useState({ category: 'SKILLED', count: '', shift: 'DAY' });
 
   const {
     photos, video, files, uploading,
@@ -269,11 +292,19 @@ export default function CaptureScreen() {
     const project = await getSelectedProject();
     setSelectedProject(project);
     setForm((prev) => ({ ...prev, project_id: project?.id || '' }));
+    const lang = await getSttLang();
+    setSttLangState(lang);
   }, []);
 
   useEffect(() => {
     void syncSelectedProject();
   }, [syncSelectedProject]);
+
+  useEffect(() => {
+    api.get('/api/resources/manpower-categories')
+      .then(r => setMpCategories(r.data || []))
+      .catch(() => {});
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -342,7 +373,7 @@ export default function CaptureScreen() {
   useSpeechRecognitionEvent('error', (e) => {
     console.log('STT error:', e);
     if (global._ekk_rec_active) {
-      ExpoSpeechRecognitionModule.start({ lang: STT_LANG, interimResults: true, continuous: true });
+      ExpoSpeechRecognitionModule.start({ lang: sttLang, interimResults: true, continuous: true });
     }
   });
   useSpeechRecognitionEvent('result', (event) => {
@@ -503,12 +534,44 @@ export default function CaptureScreen() {
       weather_code:     mapParsedWeatherCode(parsed.weather_code, parsed.remarks) || f.weather_code,
       progress_status:  mapParsedProgressStatus(parsed.progress_status || parsed.status) || f.progress_status,
       materials:        Array.isArray(parsed.materials) && parsed.materials.length ? parsed.materials : f.materials,
-      road_side:        parsed.road_side || f.road_side,
+      road_side:        parsed.road_side  || f.road_side,
       contractor_name:  parsed.contractor_name || f.contractor_name,
       rfi_number:       parsed.rfi_number != null ? String(parsed.rfi_number) : f.rfi_number,
       layer_section:    parsed.layer_section || f.layer_section,
       remarks:          parsed.remarks || f.remarks,
     }));
+
+    // Populate 3M state from voice — merge with existing, avoid duplicates by code
+    if (Array.isArray(parsed.materials_used) && parsed.materials_used.length) {
+      setMaterialsUsed(prev => {
+        const existingCodes = new Set(prev.map(m => m.code));
+        const newItems = parsed.materials_used
+          .filter(m => m.code && !existingCodes.has(m.code))
+          .map(m => ({ code: m.code, qty: String(m.quantity ?? ''), unit: m.unit || 'CUM', source: m.source || '' }));
+        return newItems.length ? [...prev, ...newItems] : prev;
+      });
+      setShow3M(true);
+    }
+    if (Array.isArray(parsed.machines_deployed) && parsed.machines_deployed.length) {
+      setMachinesDeployed(prev => {
+        const existingCodes = new Set(prev.map(m => m.code));
+        const newItems = parsed.machines_deployed
+          .filter(m => m.code && !existingCodes.has(m.code))
+          .map(m => ({ code: m.code, hours: String(m.hours ?? ''), operator: m.operator || '' }));
+        return newItems.length ? [...prev, ...newItems] : prev;
+      });
+      setShow3M(true);
+    }
+    if (Array.isArray(parsed.manpower_deployed) && parsed.manpower_deployed.length) {
+      setManpowerDeployed(prev => {
+        const existingCodes = new Set(prev.map(m => m.category));
+        const newItems = parsed.manpower_deployed
+          .filter(m => m.category && !existingCodes.has(m.category))
+          .map(m => ({ category: m.category, count: String(m.count ?? ''), shift: m.shift_type || 'DAY' }));
+        return newItems.length ? [...prev, ...newItems] : prev;
+      });
+      setShow3M(true);
+    }
   }
 
   // ── Voice ─────────────────────────────────────────────────────────────────
@@ -516,6 +579,7 @@ export default function CaptureScreen() {
     setTranscript('');
     setTranscriptSrc('local');
     setWhisperStatus('idle');
+    setWhisperError('');
     setLiveVoiceSelections({ weather_code: '', progress_status: '' });
     setRecording(true);
 
@@ -525,7 +589,7 @@ export default function CaptureScreen() {
     if (typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
       const SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
       const rec = new SR();
-      rec.lang = STT_LANG; rec.interimResults = true; rec.continuous = true;
+      rec.lang = sttLang; rec.interimResults = true; rec.continuous = true;
       rec.onstart  = () => { setRecording(true); setTranscript(''); };
       rec.onend    = () => { if (global._ekk_rec_active) rec.start(); else setRecording(false); };
       rec.onerror  = (e) => console.log('STT error:', e.error);
@@ -554,7 +618,7 @@ export default function CaptureScreen() {
     ExpoSpeechRecognitionModule.requestPermissionsAsync().then(result => {
       if (!result.granted) { setRecording(false); Alert.alert('Permission denied', 'Microphone access required'); return; }
       global._ekk_rec_active = true;
-      ExpoSpeechRecognitionModule.start({ lang: STT_LANG, interimResults: true, continuous: true });
+      ExpoSpeechRecognitionModule.start({ lang: sttLang, interimResults: true, continuous: true });
     }).catch(e => { setRecording(false); console.log('Permission error:', e); });
   }
 
@@ -566,6 +630,7 @@ export default function CaptureScreen() {
 
     // AI enhancement should depend on actual connectivity, not manual save mode.
     const audioUri = await stopAudioRecording();
+    console.log('[Voice] audioUri:', audioUri, 'effectiveMode:', effectiveMode);
     if (audioUri && effectiveMode === 'online') {
       setWhisperStatus('uploading');
       try {
@@ -580,6 +645,58 @@ export default function CaptureScreen() {
         setWhisperStatus('done');
       } catch (e) {
         console.log('[Voice] Whisper upload failed (local STT kept):', e.message);
+        // Ensure we still parse whatever local transcript we already captured.
+        if (transcript?.trim()) {
+          setParsing(true);
+          applyParsed(parseVoiceTranscript(transcript));
+          setParsing(false);
+          setTranscriptSrc('local');
+        }
+
+        // Extract structured error_reason from backend if available.
+        // IMPORTANT: e.response is null when the phone cannot reach the server at all
+        // (wrong IP / different subnet / server down). That is different from the server
+        // being up but unable to reach OpenAI, which always produces an HTTP 500 with a
+        // structured detail payload.
+        const hasServerResponse = Boolean(e?.response);
+        const detail = e?.response?.data?.detail;
+        const reason = detail?.error_reason || 'unknown';
+        const statusCode = e?.response?.status;
+        const errorMsgs = {
+          no_server:             `Cannot reach backend at ${API_BASE} — check phone and Mac are on the same Wi-Fi`,
+          no_key:                'OpenAI key not configured on server — contact admin',
+          openai_quota_exceeded: 'OpenAI credits exhausted — top up at platform.openai.com',
+          openai_invalid_key:    'OpenAI API key invalid — contact admin',
+          openai_rate_limit:     'OpenAI rate limit — retry in a few seconds',
+          server_network_error:  'Server cannot reach OpenAI — check server internet',
+          upload_validation:     'Audio upload was incomplete — speak for 2-3 seconds and retry',
+          timeout:               'AI processing timed out — local result kept, retry once',
+          unknown:               'AI unavailable — local STT result kept',
+          file_missing:          'Recording file not saved — tap mic again and hold for 2+ seconds',
+          file_empty:            'Recording was too short — hold mic button for 2-3 seconds then release',
+        };
+        let mappedReason = reason;
+
+        // Phone → server failure (Axios "Network Error" = no HTTP response received)
+        if (!hasServerResponse && e?.message === 'Network Error') {
+          mappedReason = 'no_server';
+        } else if (statusCode === 422) {
+          mappedReason = 'upload_validation';
+        } else if (e?.code === 'ECONNABORTED') {
+          mappedReason = 'timeout';
+        } else if (!mappedReason || mappedReason === 'unknown') {
+          const msg = String(detail?.message || e?.message || '').toLowerCase();
+          if (msg.includes('openai api key') || msg.includes('not configured')) mappedReason = 'no_key';
+          else if (msg.includes('quota') || msg.includes('billing')) mappedReason = 'openai_quota_exceeded';
+          else if (msg.includes('invalid_api_key') || msg.includes('authentication')) mappedReason = 'openai_invalid_key';
+          else if (msg.includes('rate limit')) mappedReason = 'openai_rate_limit';
+          // server→OpenAI network failure only if the server actually responded with 500
+          else if (hasServerResponse && (msg.includes('network') || msg.includes('connection'))) mappedReason = 'server_network_error';
+          else if (msg.includes('audio file not found') || msg.includes('file not found')) mappedReason = 'file_missing';
+          else if (msg.includes('0 bytes') || msg.includes('too short') || msg.includes('empty')) mappedReason = 'file_empty';
+        }
+
+        setWhisperError(errorMsgs[mappedReason] || errorMsgs.unknown);
         setWhisperStatus('error');
       }
     }
@@ -657,7 +774,17 @@ export default function CaptureScreen() {
   async function saveOnlineAfterConfirm(payload, chainageFrom, chainageTo, mediaCount) {
     setLoading(true);
     try {
-      const resp = await api.post('/api/capture/', payload);
+      const has3M = materialsUsed.length > 0 || machinesDeployed.length > 0 || manpowerDeployed.length > 0;
+      const endpoint = has3M ? '/api/capture/with-resources' : '/api/capture/';
+      const fullPayload = has3M
+        ? {
+            ...payload,
+            materials_used:    materialsUsed.map(m => ({ material_code: m.code, quantity: Number(m.qty), unit: m.unit, source: m.source || null })),
+            machines_deployed: machinesDeployed.map(m => ({ machine_code: m.code, hours: Number(m.hours), operator_name: m.operator || null })),
+            manpower_deployed: manpowerDeployed.map(m => ({ category: m.category, count: Number(m.count), shift_type: m.shift })),
+          }
+        : payload;
+      const resp = await api.post(endpoint, fullPayload);
       const entryId = resp.data.id;
       await addSubmittedEntryId(entryId);
       setLastSaved({
@@ -767,6 +894,8 @@ export default function CaptureScreen() {
     setEntryDate(new Date());
     setQuantity(null); setTranscript(''); setWaypoints([]);
     setParsedFlags({ is_partial_entry: false, missing_fields: [] });
+    setMaterialsUsed([]); setMachinesDeployed([]); setManpowerDeployed([]);
+    setAddingMat(false); setAddingMach(false); setAddingMp(false);
     resetMedia();
   }
 
@@ -879,7 +1008,7 @@ export default function CaptureScreen() {
           <Text style={styles.voiceBtnText}>
             {parsing ? 'Parsing...' : recording ? 'Tap to Stop' : 'Speak to Fill Form'}
           </Text>
-          {recording && <Text style={styles.voiceHint}>Listening... English / தமிழ் / हिंदी</Text>}
+          {recording && <Text style={styles.voiceHint}>{STT_LANGUAGES.find(l => l.code === sttLang)?.hint || 'Listening...'}</Text>}
         </TouchableOpacity>
 
         {(transcript !== '' || whisperStatus === 'uploading') && (
@@ -916,7 +1045,7 @@ export default function CaptureScreen() {
               </View>
             )}
             {whisperStatus === 'error' && (
-              <Text style={styles.whisperError}>⚠ AI enhance failed — local result kept</Text>
+              <Text style={styles.whisperError}>⚠ {whisperError || 'AI unavailable — local result kept'}</Text>
             )}
             <Text style={styles.transcriptText}>{transcript}</Text>
             <Text style={[styles.transcriptLabel, { marginTop: 8 }]}>Parsed into form</Text>
@@ -1308,6 +1437,225 @@ export default function CaptureScreen() {
       <Text style={styles.label}>Remarks</Text>
       <TextInput style={[styles.input, styles.remarks]} value={form.remarks} onChangeText={v => update('remarks', v)} placeholder="Weather, delays, issues..." multiline numberOfLines={3} />
 
+      {/* ── 3M Resources ── */}
+      <TouchableOpacity style={styles.threeMToggle} onPress={() => setShow3M(v => !v)}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.threeMToggleTitle}>3M Resources</Text>
+          <Text style={styles.threeMToggleSub}>
+            {materialsUsed.length + machinesDeployed.length + manpowerDeployed.length === 0
+              ? 'Tap to log Materials, Machines & Manpower'
+              : `${materialsUsed.length} material · ${machinesDeployed.length} machine · ${manpowerDeployed.length} manpower`}
+          </Text>
+        </View>
+        <Text style={styles.threeMToggleChev}>{show3M ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+
+      {show3M && (
+        <View style={styles.threeMBody}>
+
+          {/* ── MATERIALS ── */}
+          <Text style={styles.threeMSectionTitle}>Materials Used</Text>
+          {materialsUsed.map((m, i) => (
+            <View key={i} style={styles.resourceCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resourceCardCode}>{m.code}</Text>
+                <Text style={styles.resourceCardMeta}>{m.qty} {m.unit}{m.source ? ` · from ${m.source}` : ''}</Text>
+              </View>
+              <TouchableOpacity style={styles.removeBtn} onPress={() => setMaterialsUsed(p => p.filter((_, j) => j !== i))}>
+                <Text style={styles.removeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          {addingMat ? (
+            <View style={styles.inlineForm}>
+              <TextInput
+                style={styles.inlineInput}
+                placeholder="Material code (WMM / GSB / CEMENT…)"
+                placeholderTextColor="#c7c2c2"
+                value={newMat.code}
+                onChangeText={v => setNewMat(p => ({ ...p, code: v.toUpperCase() }))}
+                autoCapitalize="characters"
+              />
+              <View style={styles.twoColInline}>
+                <TextInput
+                  style={[styles.inlineInput, { flex: 1 }]}
+                  placeholder="Quantity"
+                  placeholderTextColor="#c7c2c2"
+                  value={newMat.qty}
+                  onChangeText={v => setNewMat(p => ({ ...p, qty: v }))}
+                  keyboardType="decimal-pad"
+                />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1.5 }}>
+                  {MATERIAL_UNITS.map(u => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.miniPill, newMat.unit === u && styles.miniPillActive]}
+                      onPress={() => setNewMat(p => ({ ...p, unit: u }))}
+                    >
+                      <Text style={[styles.miniPillText, newMat.unit === u && styles.miniPillTextActive]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <TextInput
+                style={styles.inlineInput}
+                placeholder="Source / supplier (optional)"
+                placeholderTextColor="#c7c2c2"
+                value={newMat.source}
+                onChangeText={v => setNewMat(p => ({ ...p, source: v }))}
+              />
+              <View style={styles.inlineActions}>
+                <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
+                  if (!newMat.code || !newMat.qty) return;
+                  setMaterialsUsed(p => [...p, newMat]);
+                  setNewMat({ code: '', qty: '', unit: 'CUM', source: '' });
+                  setAddingMat(false);
+                }}>
+                  <Text style={styles.addConfirmText}>Add Material</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddingMat(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.addResourceBtn} onPress={() => setAddingMat(true)}>
+              <Text style={styles.addResourceBtnText}>+ Add Material</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ── MACHINES ── */}
+          <Text style={[styles.threeMSectionTitle, { marginTop: 16 }]}>Machines Deployed</Text>
+          {machinesDeployed.map((m, i) => (
+            <View key={i} style={styles.resourceCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resourceCardCode}>{m.code}</Text>
+                <Text style={styles.resourceCardMeta}>{m.hours}h{m.operator ? ` · Op: ${m.operator}` : ''}</Text>
+              </View>
+              <TouchableOpacity style={styles.removeBtn} onPress={() => setMachinesDeployed(p => p.filter((_, j) => j !== i))}>
+                <Text style={styles.removeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          {addingMach ? (
+            <View style={styles.inlineForm}>
+              <Text style={styles.inlineLabel}>Machine Type</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                {MACHINE_CODES.map(c => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.miniPill, newMach.code === c && styles.miniPillActive]}
+                    onPress={() => setNewMach(p => ({ ...p, code: c }))}
+                  >
+                    <Text style={[styles.miniPillText, newMach.code === c && styles.miniPillTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TextInput
+                style={styles.inlineInput}
+                placeholder="Hours worked (e.g. 8)"
+                placeholderTextColor="#c7c2c2"
+                value={newMach.hours}
+                onChangeText={v => setNewMach(p => ({ ...p, hours: v }))}
+                keyboardType="decimal-pad"
+              />
+              <TextInput
+                style={styles.inlineInput}
+                placeholder="Operator name (optional)"
+                placeholderTextColor="#c7c2c2"
+                value={newMach.operator}
+                onChangeText={v => setNewMach(p => ({ ...p, operator: v }))}
+              />
+              <View style={styles.inlineActions}>
+                <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
+                  if (!newMach.hours) return;
+                  setMachinesDeployed(p => [...p, newMach]);
+                  setNewMach({ code: 'ROLLER', hours: '', operator: '' });
+                  setAddingMach(false);
+                }}>
+                  <Text style={styles.addConfirmText}>Add Machine</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddingMach(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.addResourceBtn} onPress={() => setAddingMach(true)}>
+              <Text style={styles.addResourceBtnText}>+ Add Machine</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ── MANPOWER ── */}
+          <Text style={[styles.threeMSectionTitle, { marginTop: 16 }]}>Manpower Deployed</Text>
+          {manpowerDeployed.map((m, i) => (
+            <View key={i} style={styles.resourceCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resourceCardCode}>{m.category}</Text>
+                <Text style={styles.resourceCardMeta}>{m.count} workers · {m.shift} shift</Text>
+              </View>
+              <TouchableOpacity style={styles.removeBtn} onPress={() => setManpowerDeployed(p => p.filter((_, j) => j !== i))}>
+                <Text style={styles.removeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          {addingMp ? (
+            <View style={styles.inlineForm}>
+              <Text style={styles.inlineLabel}>Category</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                {(mpCategories.length ? mpCategories : [{ category_code: 'SKILLED' }, { category_code: 'UNSKILLED' }, { category_code: 'MASON' }]).map(c => (
+                  <TouchableOpacity
+                    key={c.category_code}
+                    style={[styles.miniPill, newMp.category === c.category_code && styles.miniPillActive]}
+                    onPress={() => setNewMp(p => ({ ...p, category: c.category_code }))}
+                  >
+                    <Text style={[styles.miniPillText, newMp.category === c.category_code && styles.miniPillTextActive]}>{c.category_code}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TextInput
+                style={styles.inlineInput}
+                placeholder="Number of workers"
+                placeholderTextColor="#c7c2c2"
+                value={newMp.count}
+                onChangeText={v => setNewMp(p => ({ ...p, count: v }))}
+                keyboardType="numeric"
+              />
+              <Text style={styles.inlineLabel}>Shift</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                {SHIFT_TYPES.map(s => (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.miniPill, { flex: 1, justifyContent: 'center' }, newMp.shift === s && styles.miniPillActive]}
+                    onPress={() => setNewMp(p => ({ ...p, shift: s }))}
+                  >
+                    <Text style={[styles.miniPillText, newMp.shift === s && styles.miniPillTextActive]}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.inlineActions}>
+                <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
+                  if (!newMp.count) return;
+                  setManpowerDeployed(p => [...p, newMp]);
+                  setNewMp({ category: 'SKILLED', count: '', shift: 'DAY' });
+                  setAddingMp(false);
+                }}>
+                  <Text style={styles.addConfirmText}>Add Manpower</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddingMp(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.addResourceBtn} onPress={() => setAddingMp(true)}>
+              <Text style={styles.addResourceBtnText}>+ Add Manpower</Text>
+            </TouchableOpacity>
+          )}
+
+        </View>
+      )}
+
       {/* Submit */}
       <TouchableOpacity
         style={[styles.submitBtn, isOffline && styles.submitBtnOffline, (loading || networkLoading) && { opacity: 0.6 }]}
@@ -1439,6 +1787,33 @@ const styles = StyleSheet.create({
   submitText:       { color: '#fff', fontSize: 16, fontWeight: '600' },
   clearBtn:         { alignItems: 'center', marginBottom: 8 },
   clearText:        { color: '#aaa', fontSize: 13 },
+  // 3M
+  threeMToggle:     { flexDirection: 'row', alignItems: 'center', margin: 16, marginTop: 20, padding: 14, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e0e0e0' },
+  threeMToggleTitle:{ fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
+  threeMToggleSub:  { fontSize: 11, color: '#aaa', marginTop: 2 },
+  threeMToggleChev: { fontSize: 14, color: '#888', marginLeft: 8 },
+  threeMBody:       { marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e0e0e0', marginBottom: 8 },
+  threeMSectionTitle:{ fontSize: 12, fontWeight: '700', color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  resourceCard:     { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f0', borderRadius: 8, padding: 10, marginBottom: 6 },
+  resourceCardCode: { fontSize: 13, fontWeight: '700', color: '#1a1a1a' },
+  resourceCardMeta: { fontSize: 11, color: '#666', marginTop: 2 },
+  removeBtn:        { backgroundColor: '#fee2e2', borderRadius: 8, padding: 6, marginLeft: 8 },
+  removeBtnText:    { fontSize: 12, color: '#dc2626', fontWeight: '700' },
+  inlineForm:       { backgroundColor: '#f5f5f0', borderRadius: 10, padding: 12, marginBottom: 8 },
+  inlineLabel:      { fontSize: 11, color: '#666', fontWeight: '600', marginBottom: 4 },
+  inlineInput:      { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, padding: 10, fontSize: 14, color: '#1a1a1a', marginBottom: 8 },
+  twoColInline:     { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 8 },
+  miniPill:         { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff', marginRight: 6, alignItems: 'center' },
+  miniPillActive:   { backgroundColor: '#1a1a1a', borderColor: '#1a1a1a' },
+  miniPillText:     { fontSize: 11, fontWeight: '600', color: '#555' },
+  miniPillTextActive:{ color: '#fff' },
+  inlineActions:    { flexDirection: 'row', gap: 8 },
+  addConfirmBtn:    { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, alignItems: 'center' },
+  addConfirmText:   { color: '#fff', fontSize: 13, fontWeight: '600' },
+  cancelBtn:        { backgroundColor: '#f0f0f0', borderRadius: 8, padding: 10, alignItems: 'center', paddingHorizontal: 16 },
+  cancelBtnText:    { color: '#555', fontSize: 13, fontWeight: '600' },
+  addResourceBtn:   { borderStyle: 'dashed', borderWidth: 1, borderColor: '#bbb', borderRadius: 8, padding: 10, alignItems: 'center', marginBottom: 4 },
+  addResourceBtnText:{ color: '#555', fontSize: 13, fontWeight: '600' },
   logoutBtn:        { padding: 12, borderRadius: 8, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center', marginLeft: 12 },
   logoutText:       { fontSize: 18 },
 });

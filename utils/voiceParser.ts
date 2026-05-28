@@ -8,14 +8,39 @@ const STT_CORRECTIONS: [RegExp, string][] = [
   [/\bchinese\b/gi, ''],
   [/\bmillimet(?:er|re)s?\b/gi, 'mm'],
   [/\bcentimet(?:er|re)s?\b/gi, 'cm'],
+  // Tamil script → English
   [/இரு பக்கம்/g, 'both sides'],
   [/இடது/g, 'left side'],
   [/வலது/g, 'right side'],
   [/மழை/g, 'rain'],
   [/தாமதம்/g, 'delay'],
+  [/நிறைவு/g, 'completed'],
+  [/தொடங்கியது/g, 'started'],
+  [/செங்கல்/g, 'brick'],
+  [/மணல்/g, 'sand'],
+  [/சிமெண்ட்/g, 'cement'],
+  [/இரும்பு/g, 'steel'],
+  [/தொழிலாளர்/g, 'worker'],
+  [/இயந்திரம்/g, 'machine'],
+  // Tamil phonetic (romanised) construction words
+  [/\bkolai\b/gi, 'crusher'],
+  [/\bkondal\b/gi, 'aggregate'],
+  [/\bmanal\b/gi, 'sand'],
+  [/\bsimmenttu\b/gi, 'cement'],
+  [/\birumbu\b/gi, 'steel'],
+  [/\bthozhilalar\b/gi, 'worker'],
+  [/\bkudai\b/gi, 'night shift'],
+  [/\bpagal\b/gi, 'day shift'],
+  // Hindi script → English
   [/दोनों तरफ/g, 'both sides'],
   [/बारिश/g, 'rain'],
   [/देरी/g, 'delay'],
+  [/पूर्ण/g, 'completed'],
+  [/शुरू/g, 'started'],
+  [/रात की पाली/g, 'night shift'],
+  [/दिन की पाली/g, 'day shift'],
+  [/मजदूर/g, 'mazdoor'],
+  [/मिस्त्री/g, 'mason'],
   [/\bsuni\b/gi, 'sunny'],
   [/\bsonny\b/gi, 'sunny'],
   [/\bclody\b/gi, 'cloudy'],
@@ -26,6 +51,10 @@ const STT_CORRECTIONS: [RegExp, string][] = [
   [/\bon ?going\b/gi, 'ongoing'],
   [/\bcomplited\b/gi, 'completed'],
   [/\bcomplet\b/gi, 'completed'],
+  // Common STT mishearings for field terms
+  [/\bmist captain\b/gi, 'mistri'],
+  [/\bkeys in\b/gi, ''],
+  [/\bcaptain side\b/gi, ''],
 ];
 
 // Tens-words used in spoken chainage (e.g. "forty six" → 46)
@@ -226,13 +255,12 @@ function parseChainageToken(tokenRaw: string): ChainagePoint | null {
     return { km: Number(plus[1]), m: Number(plus[2]) };
   }
 
-  const compact = token.match(/^(\d{4,6})$/);
+  const compact = token.match(/^(\d{3,6})$/);
   if (compact) {
-    // Ambiguous 4-digit compact forms like "4600" are used in field speech for 46+000.
-    if (compact[1].length === 4 && compact[1].endsWith('00')) {
-      return { km: Number(compact[1].slice(0, 2)), m: 0 };
-    }
     const n = Number(compact[1]);
+    // 3-digit: treat as pure meters (e.g. "400" → 0+400)
+    if (compact[1].length === 3) return { km: 0, m: n };
+    // 4-6 digit: standard km+m split (e.g. "4300" → 4+300, "46200" → 46+200)
     return { km: Math.floor(n / 1000), m: n % 1000 };
   }
 
@@ -245,7 +273,7 @@ function parseChainageToken(tokenRaw: string): ChainagePoint | null {
 }
 
 function parseChainage(text: string): { from: ChainagePoint | null; to: ChainagePoint | null } {
-  const range = text.match(/(\d+\+\d+|\d{4,6}|\d{1,4}\s+\d{3}|\d+\s*hundred|\d{1,4}\s*km\s*\d{1,3}\s*m)\s*(?:to|\-|→)\s*(\d+\+\d+|\d{4,6}|\d{1,4}\s+\d{3}|\d+\s*hundred|\d{1,4}\s*km\s*\d{1,3}\s*m)/i);
+  const range = text.match(/(\d+\+\d+|\d{3,6}|\d{1,4}\s+\d{3}|\d+\s*hundred|\d{1,4}\s*km\s*\d{1,3}\s*m)\s*(?:to|\-|→)\s*(\d+\+\d+|\d{3,6}|\d{1,4}\s+\d{3}|\d+\s*hundred|\d{1,4}\s*km\s*\d{1,3}\s*m)/i);
   if (range) {
     return {
       from: parseChainageToken(range[1]),
@@ -496,6 +524,10 @@ export interface ParsedCapture {
   layer_section: string | null;
   is_partial_entry: boolean;
   missing_fields: string[];
+  // 3M structured resource data
+  materials_used: Material3M[];
+  machines_deployed: Machine3M[];
+  manpower_deployed: Manpower3M[];
 }
 
 export function normalizeParsedCapture(input: Record<string, unknown> | null | undefined): ParsedCapture {
@@ -536,6 +568,9 @@ export function normalizeParsedCapture(input: Record<string, unknown> | null | u
     layer_section: obj.layer_section == null ? null : String(obj.layer_section),
     is_partial_entry: typeof obj.is_partial_entry === 'boolean' ? obj.is_partial_entry : false,
     missing_fields: Array.isArray(obj.missing_fields) ? obj.missing_fields.map((f) => String(f)) : [],
+    materials_used: Array.isArray(obj.materials_used) ? (obj.materials_used as Material3M[]) : [],
+    machines_deployed: Array.isArray(obj.machines_deployed) ? (obj.machines_deployed as Machine3M[]) : [],
+    manpower_deployed: Array.isArray(obj.manpower_deployed) ? (obj.manpower_deployed as Manpower3M[]) : [],
   };
 
   return normalized;
@@ -567,6 +602,11 @@ export function parseVoiceTranscript(raw: string): ParsedCapture {
   const chainageLength = fromM != null && toM != null && toM > fromM ? toM - fromM : null;
   const lengthM = dims.length_m ?? chainageLength;
   const materials = ACTIVITY_CONFIG[activity || '']?.materials || [];
+
+  // ── 3M extraction ──────────────────────────────────────────────────────
+  const materials_used = extract3MMaterials(raw);
+  const machines_deployed = extract3MMachines(raw);
+  const manpower_deployed = extract3MManpower(raw);
 
   // Relaxed validation: compute missing_fields and is_partial_entry
   const missingFields: string[] = [];
@@ -605,6 +645,9 @@ export function parseVoiceTranscript(raw: string): ParsedCapture {
     layer_section: raw.match(/\bl(\d+)\b|layer\s*(\d+)|section[\s-]*([a-z0-9]+)/i)?.[0]?.toUpperCase() || null,
     is_partial_entry: isPartialEntry,
     missing_fields: missingFields,
+    materials_used,
+    machines_deployed,
+    manpower_deployed,
   };
 
   const normalized = normalizeParsedCapture(result as unknown as Record<string, unknown>);
@@ -617,6 +660,220 @@ export function formatChainage(decimal: number): string {
   const km = Math.floor(decimal);
   const mt = Math.round((decimal - km) * 1000);
   return `${km}+${String(mt).padStart(3, '0')}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3M EXTRACTION — Materials, Machines, Manpower
+// ═══════════════════════════════════════════════════════════════════════════
+
+const HINDI_NUMBERS: Record<string, number> = {
+  ek: 1, do: 2, teen: 3, tin: 3, char: 4, paanch: 5, panch: 5,
+  chhe: 6, chh: 6, saat: 7, sat: 7, aath: 8, aat: 8,
+  nau: 9, das: 10, gyarah: 11, barah: 12, tera: 13, chaudah: 14,
+  pandrah: 15, solah: 16, satrah: 17, atharah: 18, unnis: 19,
+  bees: 20, pacchis: 25, tees: 30, chalees: 40, pachaas: 50,
+};
+
+const MATERIAL_KW: [string, string][] = [
+  ['wet mix macadam', 'WMM'], ['granular sub base', 'GSB'], ['sub base', 'GSB'],
+  ['dense bituminous macadam', 'DBM'], ['bituminous concrete', 'BC'],
+  ['ready mixed concrete', 'RMC'], ['ready mix', 'RMC'],
+  ['cement treated base', 'CTB'],
+  ['fly ash', 'FLY_ASH'], ['flyash', 'FLY_ASH'],
+  ['tor steel', 'STEEL'], ['reinforcement', 'STEEL'],
+  ['fine aggregate', 'SAND'],
+  ['crusher dust', 'CRUSHER_DUST'],
+  ['water tanker', 'WATER'], // avoid matching 'water' to machine 'water tanker'
+  ['bituminous', 'BITUMEN'], ['bitumen', 'BITUMEN'], ['asphalt', 'BITUMEN'],
+  ['emulsion', 'EMULSION'], ['thermoplastic', 'THERMOPLASTIC'],
+  ['geotextile', 'GEOTEXTILE'], ['hdpe', 'HDPE_PIPE'],
+  ['concrete', 'RMC'], ['cement', 'CEMENT'], ['opc', 'CEMENT'], ['ppc', 'CEMENT'],
+  ['aggregate', 'AGGREGATE'], ['agg', 'AGGREGATE'], ['grit', 'AGGREGATE'],
+  ['sand', 'SAND'], ['steel', 'STEEL'],
+  ['stone', 'STONE'], ['boulder', 'STONE'],
+  ['lime', 'LIME'], ['paint', 'PAINT'],
+  ['wmm', 'WMM'], ['gsb', 'GSB'], ['dbm', 'DBM'],
+  ['sdbc', 'SDBC'], ['rmc', 'RMC'], ['ctb', 'CTB'],
+  ['water', 'WATER'], ['pipe', 'PIPE'],
+];
+
+const MACHINE_KW: [string, string][] = [
+  ['vibratory roller', 'VIB_ROLLER'], ['pneumatic roller', 'PNEU_ROLLER'],
+  ['smooth roller', 'SMT_ROLLER'], ['motor grader', 'GRADER'],
+  ['front end loader', 'LOADER'], ['concrete mixer', 'CONCRETE_MIXER'],
+  ['drum mixer', 'CONCRETE_MIXER'], ['transit mixer', 'TRANSIT_MIXER'],
+  ['concrete pump', 'CONCRETE_PUMP'], ['plate compactor', 'PLATE_COMPACTOR'],
+  ['cutting machine', 'CUTTER'], ['total station', 'TOTAL_STATION'],
+  ['weigh bridge', 'WEIGH_BRIDGE'], ['level machine', 'LEVEL_MACHINE'],
+  ['water tanker', 'WATER_TANKER'], ['hydra crane', 'HYDRA_CRANE'],
+  ['paving machine', 'PAVER'], ['backhoe', 'BACKHOE'],
+  ['excavator', 'EXCAVATOR'], ['compactor', 'COMPACTOR'],
+  ['grader', 'GRADER'], ['tipper', 'TIPPER'], ['dumper', 'DUMPER'],
+  ['tanker', 'WATER_TANKER'], ['loader', 'LOADER'], ['crane', 'CRANE'],
+  ['generator', 'GENERATOR'], ['genset', 'GENERATOR'],
+  ['rammer', 'RAMMER'], ['cutter', 'CUTTER'],
+  ['roller', 'ROLLER'], ['paver', 'PAVER'], ['truck', 'TRUCK'],
+  ['pump', 'CONCRETE_PUMP'], ['jcb', 'EXCAVATOR'],
+];
+
+const MANPOWER_KW: [string, string][] = [
+  ['site engineer', 'ENGINEER'], ['machine operator', 'OPERATOR'],
+  ['skilled worker', 'SKILLED'], ['skilled labour', 'SKILLED'],
+  ['semi skilled worker', 'SEMISKILLED'], ['semi-skilled', 'SEMISKILLED'],
+  ['semiskilled', 'SEMISKILLED'], ['unskilled worker', 'UNSKILLED'],
+  ['labourer', 'UNSKILLED'], ['laborer', 'UNSKILLED'],
+  ['mazdoor', 'UNSKILLED'], ['majdoor', 'UNSKILLED'],
+  ['mistri', 'MASON'], ['mistry', 'MASON'], ['shuttering', 'CARPENTER'],
+  ['mason', 'MASON'], ['carpenter', 'CARPENTER'], ['electrician', 'ELECTRICIAN'],
+  ['welder', 'WELDER'], ['helper', 'HELPER'], ['operator', 'OPERATOR'],
+  ['supervisor', 'SUPERVISOR'], ['foreman', 'SUPERVISOR'],
+  ['engineer', 'ENGINEER'], ['skilled', 'SKILLED'],
+  ['unskilled', 'UNSKILLED'], ['labour', 'UNSKILLED'], ['worker', 'UNSKILLED'],
+];
+
+const UNIT_KW: [string, string][] = [
+  ['cubic meter', 'CUM'], ['cubic metre', 'CUM'], ['cu m', 'CUM'],
+  ['metric ton', 'MT'], ['metric tonne', 'MT'],
+  ['running meter', 'LM'], ['linear meter', 'LM'], ['linear metre', 'LM'],
+  ['square meter', 'SQM'], ['square metre', 'SQM'],
+  ['kilogram', 'KG'], ['litre', 'LTR'], ['liter', 'LTR'],
+  ['tonne', 'MT'], ['bags', 'BAG'], ['bag', 'BAG'],
+  ['nos', 'NOS'], ['each', 'NOS'], ['number', 'NOS'],
+  ['ton', 'MT'], ['cum', 'CUM'], ['cmt', 'CUM'],
+  ['sqm', 'SQM'], ['lm', 'LM'], ['rm', 'LM'],
+  ['kg', 'KG'], ['mt', 'MT'], ['ltr', 'LTR'],
+];
+
+export interface Material3M { code: string; quantity: number | null; unit: string; source: string | null }
+export interface Machine3M { code: string; hours: number | null; operator: string | null; count: number }
+export interface Manpower3M { category: string; count: number | null; shift_type: 'DAY' | 'NIGHT' | 'GENERAL' }
+
+function resolveHindi(word: string): number | null {
+  return Object.prototype.hasOwnProperty.call(HINDI_NUMBERS, word) ? HINDI_NUMBERS[word] : null;
+}
+
+function extractQtyUnit(window: string): { qty: number | null; unit: string } {
+  const t = window.toLowerCase();
+  // Replace Hindi ghante → hours
+  const cleaned = t.replace(/\bghante?\b/g, 'hours').replace(/\bghanta\b/g, 'hour');
+
+  for (const [phrase, code] of UNIT_KW) {
+    const pat = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${phrase.replace(/\s+/g, '\\s+')}\\b`);
+    const m = pat.exec(cleaned);
+    if (m) return { qty: Number(m[1]), unit: code };
+    // Hindi number before unit
+    for (const [hw, hv] of Object.entries(HINDI_NUMBERS)) {
+      if (new RegExp(`\\b${hw}\\s+${phrase.replace(/\s+/g, '\\s+')}\\b`).test(cleaned)) {
+        return { qty: hv, unit: code };
+      }
+    }
+  }
+  // bare number
+  const bare = /(\d+(?:\.\d+)?)/.exec(cleaned);
+  return { qty: bare ? Number(bare[1]) : null, unit: '' };
+}
+
+function extract3MMaterials(raw: string): Material3M[] {
+  const t = raw.toLowerCase().replace(/[^a-z0-9\s.]/g, ' ');
+  const results: Material3M[] = [];
+  const seen = new Set<string>();
+
+  for (const [kw, code] of MATERIAL_KW) {
+    if (!t.includes(kw)) continue;
+    if (seen.has(code)) continue;
+    const idx = t.indexOf(kw);
+    const window = t.slice(Math.max(0, idx - 50), idx + kw.length + 60);
+    const { qty, unit } = extractQtyUnit(window);
+
+    // source: "from <word>" — but only if word is not a unit keyword
+    let source: string | null = null;
+    const srcM = /\bfrom\s+(\w+)/.exec(window.slice(window.indexOf(kw)));
+    if (srcM) {
+      const w = srcM[1];
+      const isUnit = UNIT_KW.some(([p]) => p === w || p.startsWith(w));
+      if (!isUnit) source = w.charAt(0).toUpperCase() + w.slice(1);
+    }
+
+    results.push({ code, quantity: qty, unit: unit || 'NOS', source });
+    seen.add(code);
+  }
+  return results;
+}
+
+function extract3MMachines(raw: string): Machine3M[] {
+  // Normalise Hindi hours
+  let t = raw.toLowerCase().replace(/\bghante?\b/g, 'hours').replace(/\bghanta\b/g, 'hour');
+  t = t.replace(/[^a-z0-9\s.]/g, ' ');
+  const results: Machine3M[] = [];
+  const seen = new Set<string>();
+
+  for (const [kw, code] of MACHINE_KW) {
+    if (!t.includes(kw)) continue;
+    if (seen.has(code)) continue;
+    const idx = t.indexOf(kw);
+    const window = t.slice(Math.max(0, idx - 30), idx + kw.length + 80);
+
+    // Hours
+    let hours: number | null = null;
+    const hm = /(\d+(?:\.\d+)?)\s*hours?\b/.exec(window);
+    if (hm) { hours = Number(hm[1]); }
+    else {
+      for (const [hw, hv] of Object.entries(HINDI_NUMBERS)) {
+        if (new RegExp(`\\b${hw}\\s+hours?\\b`).test(window)) { hours = hv; break; }
+      }
+    }
+
+    // Operator name
+    let operator: string | null = null;
+    const om = /\boperator\s+([a-z][a-z]+(?:\s+[a-z][a-z]+)?)/.exec(window);
+    if (om) operator = om[1].replace(/\b\w/g, c => c.toUpperCase());
+
+    // Count
+    let count = 1;
+    const cm = new RegExp(`(\\d+)\\s+${kw.replace(/\s+/g, '\\s+')}s?\\b`).exec(t.slice(Math.max(0, idx - 15), idx + kw.length + 5));
+    if (cm?.[1]) count = Number(cm[1]);
+
+    results.push({ code, hours, operator, count });
+    seen.add(code);
+  }
+  return results;
+}
+
+function extract3MManpower(raw: string): Manpower3M[] {
+  const t = raw.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  const results: Manpower3M[] = [];
+  const seen = new Set<string>();
+
+  for (const [kw, code] of MANPOWER_KW) {
+    if (!t.includes(kw)) continue;
+    if (seen.has(code)) continue;
+    const idx = t.indexOf(kw);
+    const window = t.slice(Math.max(0, idx - 30), idx + kw.length + 60);
+
+    // Count: number or Hindi word before keyword
+    let count: number | null = null;
+    const dm = new RegExp(`(\\d+)\\s+${kw.replace(/\s+/g, '\\s+')}`).exec(window);
+    if (dm) { count = Number(dm[1]); }
+    else {
+      for (const [hw, hv] of Object.entries(HINDI_NUMBERS)) {
+        if (new RegExp(`\\b${hw}\\s+${kw.replace(/\s+/g, '\\s+')}`).test(window)) { count = hv; break; }
+      }
+    }
+    if (count === null) {
+      const dm2 = new RegExp(`${kw.replace(/\s+/g, '\\s+')}\\s+(\\d+)`).exec(window);
+      if (dm2) count = Number(dm2[1]);
+    }
+
+    // Shift
+    let shift_type: 'DAY' | 'NIGHT' | 'GENERAL' = 'DAY';
+    if (/\bnight\s*shift\b|\bnight\b/.test(window)) shift_type = 'NIGHT';
+    else if (/\bgeneral\s*shift\b|\bgeneral\b/.test(window)) shift_type = 'GENERAL';
+    else if (/\bday\s*shift\b|\bmorning\s*shift\b|\bmorning\b|\bday\b/.test(window)) shift_type = 'DAY';
+
+    results.push({ category: code, count, shift_type });
+    seen.add(code);
+  }
+  return results;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
