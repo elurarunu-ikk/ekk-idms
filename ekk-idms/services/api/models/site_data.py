@@ -1,8 +1,9 @@
-from sqlalchemy import Column, String, Numeric, Boolean, DateTime, Integer, Text, text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Numeric, Boolean, DateTime, Integer, Text, text, ForeignKey, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from database import Base
 import uuid
 from sqlalchemy import Date
+
 
 class SiteDataTransaction(Base):
     __tablename__ = "site_data_transactions"
@@ -38,8 +39,6 @@ class SiteDataTransaction(Base):
     layer_section    = Column(String(50))
     created_at       = Column(DateTime, server_default=text("NOW()"))
     entry_date       = Column(Date, nullable=True)
-
-    # New fields
     remarks          = Column(Text)
     gps_start_lat    = Column(Numeric(10, 7))
     gps_start_lng    = Column(Numeric(10, 7))
@@ -52,3 +51,17 @@ class SiteDataTransaction(Base):
     temp_celsius     = Column(Numeric(4, 1))
     drone_flight_id  = Column(UUID(as_uuid=True))
     lidar_scan_id    = Column(UUID(as_uuid=True))
+
+    # 3M resource tracking
+    materials_used        = Column(JSONB, nullable=True)
+    material_test_refs    = Column(ARRAY(Text), nullable=True)
+    machines_deployed     = Column(JSONB, nullable=True)
+    machine_log_refs      = Column(ARRAY(Text), nullable=True)
+    manpower_deployed     = Column(JSONB, nullable=True)
+    attendance_sheet_ref  = Column(Text, nullable=True)
+    thickness_mm          = Column(Numeric(10, 3), nullable=True)
+
+    # Voice capture metadata
+    voice_transcript      = Column(Text, nullable=True)
+    voice_confidence_score = Column(Numeric(4, 3), nullable=True)
+    voice_audio_url       = Column(String(500), nullable=True)

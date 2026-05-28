@@ -37,7 +37,12 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:8081", "http://localhost:8082"],
-    allow_origin_regex=r"(http://(localhost|127\.0\.0\.1)(:\d+)?)|(https://.*\.trycloudflare\.com)",
+    allow_origin_regex=(
+        r"(http://(localhost|127\.0\.0\.1)(:\d+)?)"
+        r"|(https://.*\.trycloudflare\.com)"
+        # Private LAN ranges: 192.168.x.x, 10.x.x.x, 172.16-31.x.x (any port)
+        r"|(http://(192\.168|10\.\d+|172\.(1[6-9]|2\d|3[01]))\.\d+\.\d+(:\d+)?)"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,6 +79,10 @@ app.include_router(grade_sheet_router,    prefix="/reference-data", tags=["Refer
 app.include_router(level_register_router, prefix="/level-register",  tags=["Level Register"])
 app.include_router(ogl_router,            prefix="/ogl",             tags=["OGL"])
 app.include_router(gps_router,            prefix="/gps",             tags=["GPS"])
+
+from routers.resources_router import router as resources_router
+app.include_router(resources_router, prefix="/api/resources", tags=["3M Master Data"])
+
 app.mount("/media", StaticFiles(directory="media_uploads"), name="media")
 
 @app.get("/health", tags=["System"])

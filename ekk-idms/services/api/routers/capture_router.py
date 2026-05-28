@@ -11,9 +11,11 @@ from models.site_data import SiteDataTransaction
 from models.user import User
 from schemas.capture import (
     ManualCaptureRequest,
+    CaptureWithResourcesRequest,
     ApproveRequest,
     RejectRequest,
     CaptureEntryResponse,
+    CaptureWithResourcesResponse,
     CaptureListResponse,
 )
 
@@ -231,6 +233,174 @@ def reject_capture(
     db.commit()
     db.refresh(entry)
     return entry
+
+
+# ── 3M helpers ────────────────────────────────────────────────────────────────
+
+def _check_boq_balance(
+    db: Session,
+    project_id: uuid.UUID,
+    activity_code: str,
+    quantity: float,
+    unit: str,
+) -> list[str]:
+    """Return warning strings if the submitted quantity exceeds BOQ balance."""
+    from models.plan_data import PlanData
+    from sqlalchemy import func
+
+    warnings: list[str] = []
+    try:
+        boq_total = (
+            db.query(func.sum(PlanData.planned_qty_lm))
+            .filter(
+                PlanData.project_id == project_id,
+                PlanData.activity_code == activity_code,
+                PlanData.is_active == True,
+            )
+            .scalar()
+        ) or 0.0
+
+        executed_total = (
+            db.query(func.sum(SiteDataTransaction.quantity_lm))
+            .filter(
+                SiteDataTransaction.project_id == project_id,
+                SiteDataTransaction.activity_code == activity_code,
+                SiteDataTransaction.rejected == False,
+            )
+            .scalar()
+        ) or 0.0
+
+        balance = float(boq_total) - float(executed_total)
+        if balance > 0 and quantity > balance:
+            warnings.append(
+                f"Quantity {quantity} {unit} exceeds remaining BOQ balance "
+                f"{balance:.3f} LM for activity {activity_code}."
+            )
+    except Exception:
+        pass  # BOQ check is advisory; never block submission
+
+    return warnings
+
+
+def _build_base_entry(payload: ManualCaptureRequest, user_email: str) -> SiteDataTransaction:
+    """Construct a SiteDataTransaction ORM object from a capture payload."""
+    return SiteDataTransaction(
+        id=uuid.uuid4(),
+        project_id=payload.project_id,
+        source="manual",
+        activity_code=payload.activity_code,
+        chainage_from=payload.chainage_from,
+        chainage_to=payload.chainage_to,
+        stage=payload.stage,
+        quantity_lm=payload.quantity_lm,
+        quantity=payload.quantity,
+        unit=payload.unit,
+        work_type=payload.work_type,
+        structure_type=payload.structure_type,
+        layer_code=payload.layer_code or payload.layer,
+        element_code=payload.element_code or payload.element,
+        length_m=payload.length_m,
+        width_m=payload.width_m,
+        depth_m=payload.depth_m,
+        contractor_name=payload.contractor_name,
+        road_side=payload.road_side,
+        rfi_number=payload.rfi_number,
+        layer_section=payload.layer_section,
+        remarks=payload.remarks,
+        gps_start_lat=payload.gps_start_lat,
+        gps_start_lng=payload.gps_start_lng,
+        gps_end_lat=payload.gps_end_lat,
+        gps_end_lng=payload.gps_end_lng,
+        gps_accuracy_m=payload.gps_accuracy_m,
+        weather_code=payload.weather_code,
+        progress_status=payload.progress_status,
+        approved=False,
+        rejected=False,
+        payment_qualifies=False,
+        entry_date=payload.entry_date or datetime.utcnow(),
+    )
+
+
+# ── New 3M endpoint ───────────────────────────────────────────────────────────
+
+@router.post(
+    "/with-resources",
+    response_model=CaptureWithResourcesResponse,
+    summary="Submit capture with 3M resource data (Materials, Machines, Manpower)",
+)
+def create_capture_with_resources(
+    payload: CaptureWithResourcesRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Submit a field capture entry that includes optional resource tracking.
+
+    Supports three input modes (combinable):
+    - **Voice-only**: send `voice_transcript`; 3M data is auto-extracted.
+    - **Manual-only**: send `materials_used`, `machines_deployed`, `manpower_deployed` arrays.
+    - **Hybrid**: send `voice_transcript` to pre-fill, then override with manual arrays.
+
+    All 3M fields are optional — the endpoint is fully backward-compatible with
+    the basic `/capture/` endpoint.
+    """
+    ensure_project_action(db, user, payload.project_id, "capture", "add")
+
+    # BOQ advisory check (non-blocking)
+    boq_warnings: list[str] = []
+    if payload.quantity and payload.quantity_lm and payload.activity_code:
+        boq_warnings = _check_boq_balance(
+            db,
+            payload.project_id,
+            payload.activity_code,
+            float(payload.quantity_lm),
+            payload.unit or "",
+        )
+
+    # Build base entry
+    entry = _build_base_entry(payload, user.email)
+    entry.source = "voice" if payload.voice_transcript else "manual"
+
+    # Attach 3M data as JSONB
+    if payload.materials_used:
+        entry.materials_used = [m.model_dump() for m in payload.materials_used]
+        if payload.material_test_refs:
+            entry.material_test_refs = payload.material_test_refs
+
+    if payload.machines_deployed:
+        entry.machines_deployed = [m.model_dump() for m in payload.machines_deployed]
+        if payload.machine_log_refs:
+            entry.machine_log_refs = payload.machine_log_refs
+
+    if payload.manpower_deployed:
+        entry.manpower_deployed = [m.model_dump() for m in payload.manpower_deployed]
+        if payload.attendance_sheet_ref:
+            entry.attendance_sheet_ref = payload.attendance_sheet_ref
+
+    # Voice metadata
+    if payload.voice_transcript:
+        entry.voice_transcript = payload.voice_transcript
+        entry.voice_confidence_score = payload.voice_confidence
+        if payload.voice_audio_url:
+            entry.voice_audio_url = payload.voice_audio_url
+
+    if payload.thickness_mm is not None:
+        entry.thickness_mm = payload.thickness_mm
+
+    db.add(entry)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid project_id. Seed or create the project before submitting captures.",
+        ) from exc
+    db.refresh(entry)
+
+    response = CaptureWithResourcesResponse.model_validate(entry)
+    response.boq_warnings = boq_warnings or None
+    return response
 
 
 @router.delete("/{entry_id}", summary="Delete a capture entry")
