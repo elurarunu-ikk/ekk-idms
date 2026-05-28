@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "allowJs": true,
+    "rootDir": "."
+  },
+  "extends": "expo/tsconfig.base",
+  "exclude": ["node_modules"]
+}
