@@ -25,7 +25,7 @@ from schemas.level_register import GradeSheetUploadResponse, SheetUploadSummary
 
 router = APIRouter()
 
-LAYER_SHEETS = ["BC", "DBM", "WMM", "CTB", "GSB", "SUBGRADE", "EMBANKMENT TOP"]
+LAYER_SHEETS = ["BC", "DBM", "WMM", "CTB", "CTSB", "GSB", "SUBGRADE", "EMBANKMENT TOP", "EMBANKMENT"]
 
 
 @router.post(

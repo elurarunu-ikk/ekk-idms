@@ -157,21 +157,114 @@ const EntryDetail = () => {
           </div>
         )}
 
+        {/* ── Core classification ── */}
+        <h2 className="mb-2 mt-1 text-sm font-semibold uppercase tracking-wide text-gray-500">Classification</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Project</p><p className="text-sm text-gray-900">{projectName}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Activity Code</p><p className="text-sm text-gray-900">{entry.activity_code}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Source</p><p className="text-sm text-gray-900">{entry.source}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage From</p><p className="text-sm text-gray-900">{entry.chainage_from}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage To</p><p className="text-sm text-gray-900">{entry.chainage_to}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Stage</p><p className="text-sm text-gray-900">{entry.stage}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Quantity (LM)</p><p className="text-sm text-gray-900">{entry.quantity_lm}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Contractor Name</p><p className="text-sm text-gray-900">{entry.contractor_name}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Road Side</p><p className="text-sm text-gray-900">{entry.road_side}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">RFI Number</p><p className="text-sm text-gray-900">{entry.rfi_number}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Project</p><p className="text-sm font-medium text-gray-900">{projectName}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Source</p><p className="text-sm text-gray-900">{entry.source || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Work Type</p><p className="text-sm text-gray-900">{entry.work_type || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Activity Code</p><p className="text-sm text-gray-900">{entry.activity_code || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Stage / Layer</p><p className="text-sm text-gray-900">{entry.stage || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Layer Code</p><p className="text-sm text-gray-900">{entry.layer_code || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Element</p><p className="text-sm text-gray-900">{entry.element_code || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Structure Type</p><p className="text-sm text-gray-900">{entry.structure_type || '-'}</p></div>
+        </div>
+
+        {/* ── Location ── */}
+        <h2 className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Location</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage From</p><p className="text-sm text-gray-900">{entry.chainage_from ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage To</p><p className="text-sm text-gray-900">{entry.chainage_to ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Road Side</p><p className="text-sm text-gray-900">{entry.road_side || '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Layer Section</p><p className="text-sm text-gray-900">{entry.layer_section || '-'}</p></div>
+          {entry.gps_start_lat && (
+            <div className={fieldRowClass}><p className="text-xs text-gray-500">GPS Start</p><p className="text-sm text-gray-900">{entry.gps_start_lat}, {entry.gps_start_lng}</p></div>
+          )}
+          {entry.gps_end_lat && (
+            <div className={fieldRowClass}><p className="text-xs text-gray-500">GPS End</p><p className="text-sm text-gray-900">{entry.gps_end_lat}, {entry.gps_end_lng}</p></div>
+          )}
+        </div>
+
+        {/* ── Quantity & Dimensions ── */}
+        <h2 className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Quantity & Dimensions</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Quantity (LM)</p><p className="text-sm text-gray-900">{entry.quantity_lm ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Quantity</p><p className="text-sm text-gray-900">{entry.quantity != null ? `${entry.quantity} ${entry.unit || ''}` : '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Length (m)</p><p className="text-sm text-gray-900">{entry.length_m ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Width (m)</p><p className="text-sm text-gray-900">{entry.width_m ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Depth (m)</p><p className="text-sm text-gray-900">{entry.depth_m ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Thickness (mm)</p><p className="text-sm text-gray-900">{entry.thickness_mm ?? '-'}</p></div>
+        </div>
+
+        {/* ── Site details ── */}
+        <h2 className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Site Details</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Contractor</p><p className="text-sm text-gray-900">{entry.contractor_name || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">RFI Number</p><p className="text-sm text-gray-900">{entry.rfi_number ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Weather</p><p className="text-sm text-gray-900">{entry.weather_code || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Progress</p><p className="text-sm text-gray-900">{entry.progress_status || '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Entry Date</p><p className="text-sm text-gray-900">{entry.entry_date ? new Date(entry.entry_date).toLocaleDateString() : '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Payment Qualifies</p><p className="text-sm text-gray-900">{entry.payment_qualifies ? 'Yes' : 'No'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Created At</p><p className="text-sm text-gray-900">{new Date(entry.created_at).toLocaleString()}</p></div>
+          {entry.remarks && (
+            <div className={`${fieldRowClass} md:col-span-2`}><p className="text-xs text-gray-500">Remarks</p><p className="text-sm text-gray-900">{entry.remarks}</p></div>
+          )}
         </div>
+
+        {/* ── 3M Resources ── */}
+        {(entry.materials_used?.length > 0 || entry.machines_deployed?.length > 0 || entry.manpower_deployed?.length > 0) && (
+          <>
+            <h2 className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">3M Resources</h2>
+            {entry.materials_used?.length > 0 && (
+              <div className="mb-3">
+                <p className="mb-1 text-xs font-semibold text-gray-600">Materials</p>
+                <div className="flex flex-wrap gap-2">
+                  {entry.materials_used.map((m, i) => (
+                    <span key={i} className="rounded-full bg-blue-100 px-3 py-1 text-xs text-blue-800">
+                      {m.material_code} {m.quantity ? `${m.quantity} ${m.unit || ''}` : ''}
+                      {m.source ? ` (${m.source})` : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {entry.machines_deployed?.length > 0 && (
+              <div className="mb-3">
+                <p className="mb-1 text-xs font-semibold text-gray-600">Machines</p>
+                <div className="flex flex-wrap gap-2">
+                  {entry.machines_deployed.map((m, i) => (
+                    <span key={i} className="rounded-full bg-orange-100 px-3 py-1 text-xs text-orange-800">
+                      {m.machine_code} ×{m.count || 1}{m.hours ? ` — ${m.hours}h` : ''}
+                      {m.operator_name ? ` (${m.operator_name})` : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {entry.manpower_deployed?.length > 0 && (
+              <div className="mb-3">
+                <p className="mb-1 text-xs font-semibold text-gray-600">Manpower</p>
+                <div className="flex flex-wrap gap-2">
+                  {entry.manpower_deployed.map((m, i) => (
+                    <span key={i} className="rounded-full bg-green-100 px-3 py-1 text-xs text-green-800">
+                      {m.category} ×{m.count || 1} ({m.shift_type || 'DAY'})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Voice transcript ── */}
+        {entry.voice_transcript && (
+          <>
+            <h2 className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Voice Transcript</h2>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm italic text-gray-600">
+              "{entry.voice_transcript}"
+            </div>
+          </>
+        )}
 
         <div className="mt-6">
           <h2 className="mb-3 text-lg font-semibold text-gray-900">Entry Images</h2>

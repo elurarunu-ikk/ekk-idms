@@ -40,9 +40,11 @@ def detect_layer_code(sheet_name: str, title_text: str) -> tuple[Optional[str], 
         "DBM": ("DBM", 60),
         "WMM": ("WMM", 100),
         "CTB": ("CTB", 180),
+        "CTSB": ("CTB", 180),
         "GSB": ("GSB", 150),
         "SUBGRADE": ("SG", None),
         "EMBANKMENT TOP": ("EMB", None),
+        "EMBANKMENT": ("EMB", None),
         "OGL": ("OGL", None),
     }
     name_upper = sheet_name.upper().strip()
@@ -155,11 +157,11 @@ def parse_layer_sheet(
 
     layer_desc = str(df.iloc[1, 0]).strip() if len(df) > 1 else None
 
-    # Find header row: first row where col 0 is 'CH'
+    # Find header row: first row where col 0 is 'CH' or 'CHAINAGE'
     header_row_idx = None
     for i, row in df.iterrows():
         cell = str(row.iloc[0]).strip().upper()
-        if cell == "CH":
+        if cell in ("CH", "CHAINAGE"):
             header_row_idx = i
             break
     if header_row_idx is None:
@@ -353,48 +355,56 @@ def parse_gps_sheet(
     uploaded_by: str,
 ) -> tuple[list[dict], Optional[str]]:
     try:
-        df = pd.read_excel(wb_path, sheet_name="GPS", header=1, engine="openpyxl")
+        df = pd.read_excel(wb_path, sheet_name="GPS", header=0, engine="openpyxl")
     except Exception as exc:
         return [], f"Failed to read GPS sheet: {exc}"
 
-    # Assign standard column names (pad if sheet has fewer cols)
-    std_cols = _GPS_COLS[: len(df.columns)]
-    df.columns = std_cols + list(df.columns[len(std_cols):])
+    # Normalise column names to lowercase+strip
+    df.columns = [str(c).strip().lower() for c in df.columns]
 
-    # Keep only rows where ch_from is numeric
-    df = df[pd.to_numeric(df["ch_from"], errors="coerce").notna()]
+    # Detect chainage column (may be named 'chainage', 'ch', 'chainage_from', etc.)
+    ch_col = next((c for c in df.columns if c in ("chainage", "ch", "chainage_from")), None)
+    lat_col = next((c for c in df.columns if c in ("latitude", "lat", "lat_start")), None)
+    lon_col = next((c for c in df.columns if c in ("longitude", "lon", "lon_start")), None)
+    if ch_col is None:
+        return [], "GPS sheet skipped: no chainage column found"
+
+    df = df[pd.to_numeric(df[ch_col], errors="coerce").notna()]
 
     now = datetime.utcnow()
     records = []
 
+    def _str(v):
+        s = str(v).strip()
+        return s if s not in ("nan", "None", "") else None
+
     for _, row in df.iterrows():
-        ch_from = safe_float(row.get("ch_from"))
-        ch_to = safe_float(row.get("ch_to"))
+        ch_from = safe_float(row.get(ch_col))
         if ch_from is None:
             continue
 
-        nh_raw = row.get("nh_new")
-        nh_number = str(nh_raw).split(".")[0] if nh_raw is not None and str(nh_raw) not in ("nan", "None", "") else None
+        # Single-point GPS format: chainage_to = chainage_from (point entry)
+        ch_to = safe_float(row.get("ch_to")) or ch_from
 
-        def _str(v):
-            s = str(v).strip()
-            return s if s not in ("nan", "None", "") else None
+        # NH number may appear as float (e.g. 45.0) — strip decimal
+        nh_raw = row.get("nh_number") or row.get("nh_new")
+        nh_number = _str(nh_raw).split(".")[0] if nh_raw is not None and _str(nh_raw) else None
 
         records.append(dict(
             project_id=project_id,
             chainage_from=int(ch_from),
-            chainage_to=int(ch_to) if ch_to is not None else int(ch_from),
+            chainage_to=int(ch_to),
             nh_number=nh_number,
             state=_str(row.get("state")),
             district=_str(row.get("district")),
             ro=_str(row.get("ro")),
             piu=_str(row.get("piu")),
-            lat_start=safe_float(row.get("lat_start")),
-            lon_start=safe_float(row.get("lon_start")),
-            alt_start_m=safe_float(row.get("alt_start")),
-            lat_end=safe_float(row.get("lat_end")),
-            lon_end=safe_float(row.get("lon_end")),
-            alt_end_m=safe_float(row.get("alt_end")),
+            lat_start=safe_float(row.get(lat_col)) if lat_col else None,
+            lon_start=safe_float(row.get(lon_col)) if lon_col else None,
+            alt_start_m=safe_float(row.get("altitude") or row.get("alt_start")),
+            lat_end=None,
+            lon_end=None,
+            alt_end_m=None,
             uploaded_at=now,
         ))
 
