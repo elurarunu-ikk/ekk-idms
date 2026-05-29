@@ -212,49 +212,102 @@ const EntryDetail = () => {
         </div>
 
         {/* ── 3M Resources ── */}
-        {(entry.materials_used?.length > 0 || entry.machines_deployed?.length > 0 || entry.manpower_deployed?.length > 0) && (
-          <>
-            <h2 className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">3M Resources</h2>
-            {entry.materials_used?.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-1 text-xs font-semibold text-gray-600">Materials</p>
-                <div className="flex flex-wrap gap-2">
+        <h2 className="mb-3 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          3M Resources — Materials / Machines / Manpower
+        </h2>
+
+        {/* Materials */}
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-bold text-blue-700 uppercase tracking-wide">Materials Used</p>
+          {entry.materials_used?.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-blue-100">
+              <table className="min-w-full text-sm">
+                <thead className="bg-blue-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-700">Material</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-700">Quantity</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-700">Unit</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-700">Source</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-blue-50 bg-white">
                   {entry.materials_used.map((m, i) => (
-                    <span key={i} className="rounded-full bg-blue-100 px-3 py-1 text-xs text-blue-800">
-                      {m.material_code} {m.quantity ? `${m.quantity} ${m.unit || ''}` : ''}
-                      {m.source ? ` (${m.source})` : ''}
-                    </span>
+                    <tr key={i}>
+                      <td className="px-4 py-2 font-medium text-gray-900">{m.material_code || m.material_name || '-'}</td>
+                      <td className="px-4 py-2 text-gray-700">{m.quantity ?? '-'}</td>
+                      <td className="px-4 py-2 text-gray-700">{m.unit || '-'}</td>
+                      <td className="px-4 py-2 text-gray-500">{m.source || '-'}</td>
+                    </tr>
                   ))}
-                </div>
-              </div>
-            )}
-            {entry.machines_deployed?.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-1 text-xs font-semibold text-gray-600">Machines</p>
-                <div className="flex flex-wrap gap-2">
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-blue-200 px-4 py-3 text-sm text-gray-400">No materials recorded</p>
+          )}
+        </div>
+
+        {/* Machines */}
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-bold text-orange-700 uppercase tracking-wide">Machines Deployed</p>
+          {entry.machines_deployed?.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-orange-100">
+              <table className="min-w-full text-sm">
+                <thead className="bg-orange-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-700">Machine</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-700">Count</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-700">Hours</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-700">Operator</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-50 bg-white">
                   {entry.machines_deployed.map((m, i) => (
-                    <span key={i} className="rounded-full bg-orange-100 px-3 py-1 text-xs text-orange-800">
-                      {m.machine_code} ×{m.count || 1}{m.hours ? ` — ${m.hours}h` : ''}
-                      {m.operator_name ? ` (${m.operator_name})` : ''}
-                    </span>
+                    <tr key={i}>
+                      <td className="px-4 py-2 font-medium text-gray-900">{m.machine_code || m.machine_name || '-'}</td>
+                      <td className="px-4 py-2 text-gray-700">{m.count ?? 1}</td>
+                      <td className="px-4 py-2 text-gray-700">{m.hours != null ? `${m.hours} hrs` : '-'}</td>
+                      <td className="px-4 py-2 text-gray-500">{m.operator_name || m.operator || '-'}</td>
+                    </tr>
                   ))}
-                </div>
-              </div>
-            )}
-            {entry.manpower_deployed?.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-1 text-xs font-semibold text-gray-600">Manpower</p>
-                <div className="flex flex-wrap gap-2">
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-orange-200 px-4 py-3 text-sm text-gray-400">No machines recorded</p>
+          )}
+        </div>
+
+        {/* Manpower */}
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-bold text-green-700 uppercase tracking-wide">Manpower Deployed</p>
+          {entry.manpower_deployed?.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-green-100">
+              <table className="min-w-full text-sm">
+                <thead className="bg-green-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-700">Category</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-700">Count</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-700">Shift</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-700">Hours</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-green-50 bg-white">
                   {entry.manpower_deployed.map((m, i) => (
-                    <span key={i} className="rounded-full bg-green-100 px-3 py-1 text-xs text-green-800">
-                      {m.category} ×{m.count || 1} ({m.shift_type || 'DAY'})
-                    </span>
+                    <tr key={i}>
+                      <td className="px-4 py-2 font-medium text-gray-900">{m.category || '-'}</td>
+                      <td className="px-4 py-2 text-gray-700">{m.count ?? '-'}</td>
+                      <td className="px-4 py-2 text-gray-700">{m.shift_type || 'DAY'}</td>
+                      <td className="px-4 py-2 text-gray-500">{m.shift_hours != null ? `${m.shift_hours} hrs` : '-'}</td>
+                    </tr>
                   ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-green-200 px-4 py-3 text-sm text-gray-400">No manpower recorded</p>
+          )}
+        </div>
 
         {/* ── Voice transcript ── */}
         {entry.voice_transcript && (
