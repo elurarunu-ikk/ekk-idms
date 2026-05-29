@@ -221,6 +221,8 @@ class CaptureEntryResponse(BaseModel):
     gps_accuracy_m:   Optional[float] = None
     weather_code:     Optional[str] = None
     progress_status:  Optional[str] = None
+    entry_date:       Optional[datetime] = None
+    remarks:          Optional[str] = None
     created_at:       Optional[datetime] = None
 
     class Config:

@@ -132,7 +132,7 @@ def list_pending(
     return CaptureListResponse(total=total, entries=entries)
 
 
-@router.get("/{entry_id}", response_model=CaptureEntryResponse, summary="Get a single capture entry")
+@router.get("/{entry_id}", response_model=CaptureWithResourcesResponse, summary="Get a single capture entry")
 def get_capture(
     entry_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -145,10 +145,10 @@ def get_capture(
     return entry
 
 
-@router.put("/{entry_id}", response_model=CaptureEntryResponse, summary="Update a capture entry")
+@router.put("/{entry_id}", response_model=CaptureWithResourcesResponse, summary="Update a capture entry")
 def update_capture(
     entry_id: uuid.UUID,
-    payload: ManualCaptureRequest,
+    payload: CaptureWithResourcesRequest,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -159,26 +159,36 @@ def update_capture(
     if entry.approved:
         raise HTTPException(status_code=400, detail="Cannot edit an approved entry")
 
-    entry.activity_code = payload.activity_code
-    entry.chainage_from = payload.chainage_from
-    entry.chainage_to = payload.chainage_to
-    entry.stage = payload.stage
-    entry.quantity_lm = payload.quantity_lm
-    entry.quantity = payload.quantity
-    entry.unit = payload.unit
-    entry.work_type = payload.work_type
-    entry.structure_type = payload.structure_type
-    entry.layer_code = payload.layer_code or payload.layer
-    entry.element_code = payload.element_code or payload.element
-    entry.length_m = payload.length_m
-    entry.width_m = payload.width_m
-    entry.depth_m = payload.depth_m
+    entry.activity_code   = payload.activity_code
+    entry.chainage_from   = payload.chainage_from
+    entry.chainage_to     = payload.chainage_to
+    entry.stage           = payload.stage
+    entry.quantity_lm     = payload.quantity_lm
+    entry.quantity        = payload.quantity
+    entry.unit            = payload.unit
+    entry.work_type       = payload.work_type
+    entry.structure_type  = payload.structure_type
+    entry.layer_code      = payload.layer_code or payload.layer
+    entry.element_code    = payload.element_code or payload.element
+    entry.length_m        = payload.length_m
+    entry.width_m         = payload.width_m
+    entry.depth_m         = payload.depth_m
     entry.contractor_name = payload.contractor_name
-    entry.road_side = payload.road_side
-    entry.rfi_number = payload.rfi_number
-    entry.layer_section = payload.layer_section
-    entry.weather_code = payload.weather_code
+    entry.road_side       = payload.road_side
+    entry.rfi_number      = payload.rfi_number
+    entry.layer_section   = payload.layer_section
+    entry.weather_code    = payload.weather_code
     entry.progress_status = payload.progress_status
+    entry.remarks         = payload.remarks
+    if payload.entry_date:
+        entry.entry_date  = payload.entry_date
+    # Update 3M resources if provided (None means "don't overwrite")
+    if payload.materials_used is not None:
+        entry.materials_used = [m.model_dump() for m in payload.materials_used]
+    if payload.machines_deployed is not None:
+        entry.machines_deployed = [m.model_dump() for m in payload.machines_deployed]
+    if payload.manpower_deployed is not None:
+        entry.manpower_deployed = [m.model_dump() for m in payload.manpower_deployed]
 
     db.commit()
     db.refresh(entry)
