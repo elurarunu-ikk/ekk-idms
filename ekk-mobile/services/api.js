@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform, NativeModules } from 'react-native';
 import Constants from 'expo-constants';
 
-const PUBLIC_API_BASE = 'https://pray-fur-hart-favourite.trycloudflare.com';
+const PUBLIC_API_BASE = 'https://thank-lists-mtv-joel.trycloudflare.com';
 function hostFromUri(raw) {
   if (!raw || typeof raw !== 'string') return '';
   try {
@@ -38,7 +38,9 @@ function normalizeApiBase(rawBase, defaultPort = '80', fallbackProtocol = 'http'
   if (!trimmed) return '';
 
   const addPort = (parsed) => {
-    if (!parsed.port && /^https?:$/.test(parsed.protocol)) {
+    // Only force port for http:// — https:// uses 443 by default and CDN/tunnel
+    // hosts reject connections attempted on port 80 over HTTPS
+    if (!parsed.port && parsed.protocol === 'http:') {
       parsed.port = defaultPort;
     }
     return parsed.toString().replace(/\/+$/, '');
