@@ -41,8 +41,8 @@ Return ONLY a valid JSON object with this schema:
     "width_m": number|"",
     "depth_m": number|"",
     "element": "FOOTING|FOUNDATION|PIER|PIER_CAP|ABUTMENT|GIRDER|DECK|BEARING|EXPANSION_JOINT|",
-    "layer": "Subgrade|GSB|Base Course|Binder Course|Wearing Course|Prime Coat|Tack Coat|",
-    "activity": "EXCAVATION|PCC|RCC|REINF|SHUTTER|ERECTION|INSTALLATION|DBM|BC|SDBC|WMM|GSB|EARTHWORK|PRIME_COAT|TACK_COAT|DRAIN|KERB|",
+    "layer": "SUBGRADE|GSB|CTSB|CTB|WMM|BASE|BINDER|WEARING|PRIME|TACK|SHOULDER|MEDIAN|EMBANKMENT|",
+    "activity": "EXCAVATION|PCC|RCC|REINF|SHUTTER|ERECTION|INSTALLATION|DBM|BC|SDBC|WMM|GSB|CTSB|CTB|EARTHWORK|PRIME_COAT|TACK_COAT|DRAIN|KERB|",
     "quantity": number|"",
     "unit": "CUM|MT|KG|SQM|LM|BAG|NOS|LTR|",
     "road_side": "LHS|RHS|Both|Median|",
@@ -71,7 +71,7 @@ RELAXED VALIDATION RULES:
 
 FIELD RULES:
 
-1) work_type: Road=DBM/BC/SDBC/WMM/GSB/Earthwork/Prime coat/Tack coat;
+1) work_type: Road=DBM/BC/SDBC/WMM/GSB/CTSB/CTB/Earthwork/Prime coat/Tack coat;
    Structure=Pier/Footing/Foundation/Girder/Deck/RCC/PCC/REINF/SHUTTER; Drain; Ancillary=Kerb/guard rail
 
 2) Chainage: "45+100", "45100", "45 hundred" → km=45, m=100. Skip if unclear.
@@ -82,7 +82,11 @@ FIELD RULES:
 
 5) Quantity: Road with L+W+D → L×W×D CUM; DBM/BC/SDBC explicit TON → keep; Structure RCC/PCC with L+W+D → L×W×D CUM; else leave empty.
 
-6) Layer: Earthwork→Subgrade, GSB→GSB, WMM→Base Course, DBM→Binder Course, BC/SDBC→Wearing Course.
+6) Layer codes — use EXACTLY these codes:
+   Earthwork/Embankment→SUBGRADE, GSB→GSB, CTSB→CTSB, CTB→CTB,
+   WMM→WMM, DBM→BINDER, BC/SDBC→WEARING,
+   Prime coat→PRIME, Tack coat→TACK, Shoulder→SHOULDER, Median→MEDIAN.
+   Engineers say abbreviations: "BC" means WEARING, "DBM" means BINDER, "WMM" means WMM.
 
 7) materials_used — extract EVERY material explicitly mentioned with quantity and unit:
    - "45 cum WMM from crusher" → {material_code:"WMM", quantity:45, unit:"CUM", source:"crusher"}

@@ -147,16 +147,29 @@ function mapParsedActivityToCaptureActivity(activity) {
 
 function mapParsedLayerToCode(layer) {
   const map = {
-    SUBGRADE: 'SUBGRADE',
-    GSB: 'GSB',
-    WMM: 'WMM',
+    // Direct abbreviations — what engineers actually say
+    'BC': 'WEARING',
+    'DBM': 'BINDER',
+    'SDBC': 'WEARING',
+    'WMM': 'WMM',
+    'GSB': 'GSB',
+    'CTSB': 'CTSB',
+    'CTB': 'CTB',
+    'SUBGRADE': 'SUBGRADE',
+    'EMBANKMENT': 'EMBANKMENT',
+    'EMB': 'EMBANKMENT',
+    'SHOULDER': 'SHOULDER',
+    'MEDIAN': 'MEDIAN',
+    // Full label forms (from GPT responses)
     'BASE COURSE': 'BASE',
     'BINDER COURSE': 'BINDER',
+    'BINDER COURSE (DBM)': 'BINDER',
     'WEARING COURSE': 'WEARING',
+    'WEARING COURSE (BC)': 'WEARING',
     'PRIME COAT': 'PRIME',
     'TACK COAT': 'TACK',
   };
-  return map[String(layer || '').toUpperCase()] || '';
+  return map[String(layer || '').trim().toUpperCase()] || '';
 }
 
 function mapParsedProgressStatus(status) {

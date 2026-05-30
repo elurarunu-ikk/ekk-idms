@@ -159,15 +159,24 @@ const WORK_TYPE_KEYWORDS: Record<string, string[]> = {
   Ancillary: ['kerb', 'road marking', 'guard rail'],
 };
 
+// Returns layer_code directly so mapParsedLayerToCode works without translation
 const LAYER_MAP: Record<string, string> = {
-  EARTHWORK: 'Subgrade',
+  EARTHWORK: 'SUBGRADE',
+  COMPACTION: 'SUBGRADE',
+  GSB_LAY: 'GSB',
   GSB: 'GSB',
-  WMM: 'Base Course',
-  DBM: 'Binder Course',
-  BC: 'Wearing Course',
-  SDBC: 'Wearing Course',
-  PRIME_COAT: 'Prime Coat',
-  TACK_COAT: 'Tack Coat',
+  WMM_LAY: 'WMM',
+  WMM: 'WMM',
+  DLC: 'CTB',
+  CTB: 'CTB',
+  CTSB: 'CTSB',
+  DBM: 'BINDER',
+  BC: 'WEARING',
+  SDBC: 'WEARING',
+  PRIME_COAT: 'PRIME',
+  TACK_COAT: 'TACK',
+  SHOULDER_PREP: 'SHOULDER',
+  MEDIAN_WORK: 'MEDIAN',
 };
 
 const ELEMENT_MAP: [string, string][] = [
