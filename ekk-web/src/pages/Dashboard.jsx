@@ -64,6 +64,24 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Mobile app download banner */}
+      <a
+        href="/downloads/ekk-idms.apk"
+        download
+        className="flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-3 text-white shadow-sm transition hover:from-primary-700 hover:to-primary-800"
+      >
+        <div className="flex items-center gap-3">
+          <svg className="h-6 w-6 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 18.5l-4-4m4 4l4-4m-4 4V5M5 20h14" />
+          </svg>
+          <div>
+            <p className="text-sm font-semibold leading-tight">Download EKK IDMS Mobile App</p>
+            <p className="text-xs text-primary-200">Android APK · ekk-idms.apk</p>
+          </div>
+        </div>
+        <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">Download APK</span>
+      </a>
+
       {/* Page header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

@@ -133,6 +133,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+      - ./files/downloads:/srv/downloads:ro
 
   adminer:
     container_name: ekk_adminer

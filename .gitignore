@@ -54,6 +54,15 @@ App_activation.txt
 *.jks
 *.keystore
 
+# APK downloads (self-hosted, do not commit binaries)
+ekk-idms/files/downloads/
+
+# Cloudflare tunnel scripts and logs
+start_ekk_tunnel.bat
+start_tunnel_hidden.vbs
+run_tunnel.bat
+tunnel.log
+
 # Database dumps
 *.dump
 *.sql.gz
