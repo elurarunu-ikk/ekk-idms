@@ -134,7 +134,7 @@ export const listEntryMedia = (entryId) => {
 };
 
 export const createCapture = (payload) => {
-  return api.post('/api/capture/', payload).then((res) => res.data);
+  return api.post('/api/capture/with-resources', payload).then((res) => res.data);
 };
 
 export const updateCapture = (id, payload) => {
@@ -236,5 +236,34 @@ export const askAI = (projectId, message, history = []) =>
       history,
     })
     .then((r) => r.data);
+
+// ── 3M Resources Master Data ─────────────────────────────────────────────────
+
+export const listMaterials = (projectId, activeOnly = true) =>
+  api.get('/api/resources/materials', { params: { project_id: projectId, active_only: activeOnly } }).then((r) => r.data);
+
+export const createMaterial = (payload) =>
+  api.post('/api/resources/materials', payload).then((r) => r.data);
+
+export const updateMaterial = (materialId, payload) =>
+  api.patch(`/api/resources/materials/${materialId}`, payload).then((r) => r.data);
+
+export const deleteMaterial = (materialId) =>
+  api.delete(`/api/resources/materials/${materialId}`).then((r) => r.data);
+
+export const listMachines = (projectId, activeOnly = true) =>
+  api.get('/api/resources/machines', { params: { project_id: projectId, active_only: activeOnly } }).then((r) => r.data);
+
+export const createMachine = (payload) =>
+  api.post('/api/resources/machines', payload).then((r) => r.data);
+
+export const updateMachine = (machineId, payload) =>
+  api.patch(`/api/resources/machines/${machineId}`, payload).then((r) => r.data);
+
+export const deleteMachine = (machineId) =>
+  api.delete(`/api/resources/machines/${machineId}`).then((r) => r.data);
+
+export const listManpowerCategories = (activeOnly = true) =>
+  api.get('/api/resources/manpower-categories', { params: { active_only: activeOnly } }).then((r) => r.data);
 
 export default api;

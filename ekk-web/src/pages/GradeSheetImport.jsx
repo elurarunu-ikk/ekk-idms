@@ -8,7 +8,7 @@ import {
   uploadGradeSheet,
 } from '../services/apiService';
 
-const LAYER_ORDER = ['EMB', 'SG', 'GSB', 'CTB', 'WMM', 'DBM', 'BC'];
+const LAYER_ORDER = ['EMB', 'SG', 'GSB', 'CTSB', 'CTB', 'WMM', 'DBM', 'BC'];
 
 const sortLayers = (layers) =>
   [...layers].sort(
