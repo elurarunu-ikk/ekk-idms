@@ -71,8 +71,11 @@ RELAXED VALIDATION RULES:
 
 FIELD RULES:
 
-1) work_type: Road=DBM/BC/SDBC/WMM/GSB/CTSB/CTB/Earthwork/Prime coat/Tack coat;
+1) work_type: Road=DBM/BC/SDBC/WMM/GSB/CTSB/CTB/Earthwork/Embankment/Filling/Compaction/Prime coat/Tack coat;
    Structure=Pier/Footing/Foundation/Girder/Deck/RCC/PCC/REINF/SHUTTER; Drain; Ancillary=Kerb/guard rail
+   "Embankment filling" → work_type=Road, activity=EARTHWORK, layer=EMBANKMENT
+   "CTSB laying" → work_type=Road, activity=SPREADING, layer=CTSB
+   "CTB compaction" → work_type=Road, activity=COMPACTION, layer=CTB
 
 2) Chainage: "45+100", "45100", "45 hundred" → km=45, m=100. Skip if unclear.
 

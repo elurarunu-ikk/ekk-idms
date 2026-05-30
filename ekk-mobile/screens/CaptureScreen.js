@@ -123,43 +123,48 @@ function toNumberOrNull(val) {
 
 function mapParsedActivityToCaptureActivity(activity) {
   const map = {
-    WMM: 'WMM_LAY',
-    GSB: 'GSB_LAY',
+    // Road layers spoken as activity
+    WMM: 'WMM_LAY',     GSB: 'GSB_LAY',
+    CTSB: 'SPREADING',  CTB: 'DLC',
+    DBM: 'DBM',         BC: 'BC',         SDBC: 'SDBC',
+    PRIME_COAT: 'PRIME_COAT',             TACK_COAT: 'TACK_COAT',
+    // Earthwork variants
     EARTHWORK: 'EARTHWORK',
-    DBM: 'DBM',
-    BC: 'BC',
-    SDBC: 'SDBC',
-    PRIME_COAT: 'PRIME_COAT',
-    TACK_COAT: 'TACK_COAT',
-    RCC: 'RCC',
-    PCC: 'PCC',
-    EXCAVATION: 'EXCAVATION',
-    REINF: 'REINF',
-    SHUTTER: 'SHUTTER',
-    ERECTION: 'ERECTION',
-    INSTALLATION: 'INSTALLATION',
-    DRAIN: 'DRAIN',
-    KERB: 'KERB',
-    MISC: 'MISC',
+    EMBANKMENT: 'EARTHWORK',   FILLING: 'EARTHWORK',
+    COMPACTION: 'COMPACTION',
+    SPREADING: 'SPREADING',    ROLLING: 'ROLLING',
+    // Structure
+    RCC: 'RCC', PCC: 'PCC', EXCAVATION: 'EXCAVATION',
+    REINF: 'REINF', SHUTTER: 'SHUTTER',
+    ERECTION: 'ERECTION', INSTALLATION: 'INSTALLATION',
+    CASTING: 'CASTING',
+    // Other
+    DRAIN: 'DRAIN', KERB: 'KERB', MISC: 'MISC',
   };
   return map[String(activity || '').toUpperCase()] || '';
 }
 
 function mapParsedLayerToCode(layer) {
   const map = {
-    // Direct abbreviations — what engineers actually say
-    'BC': 'WEARING',
-    'DBM': 'BINDER',
-    'SDBC': 'WEARING',
+    // Direct codes (passthrough — voiceParser now returns codes)
+    'WEARING': 'WEARING',
+    'BINDER': 'BINDER',
+    'BASE': 'BASE',
+    'PRIME': 'PRIME',
+    'TACK': 'TACK',
     'WMM': 'WMM',
     'GSB': 'GSB',
     'CTSB': 'CTSB',
     'CTB': 'CTB',
     'SUBGRADE': 'SUBGRADE',
     'EMBANKMENT': 'EMBANKMENT',
-    'EMB': 'EMBANKMENT',
     'SHOULDER': 'SHOULDER',
     'MEDIAN': 'MEDIAN',
+    // Abbreviations engineers say out loud
+    'BC': 'WEARING',
+    'DBM': 'BINDER',
+    'SDBC': 'WEARING',
+    'EMB': 'EMBANKMENT',
     // Full label forms (from GPT responses)
     'BASE COURSE': 'BASE',
     'BINDER COURSE': 'BINDER',
