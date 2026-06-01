@@ -83,7 +83,32 @@ app.include_router(gps_router,            prefix="/gps",             tags=["GPS"
 from routers.resources_router import router as resources_router
 app.include_router(resources_router, prefix="/api/resources", tags=["3M Master Data"])
 
+from routers.user_mgmt_router  import router as user_mgmt_router
+from routers.hr_router         import router as hr_router
+from routers.permission_router import router as permission_router
+app.include_router(user_mgmt_router,  prefix="/api/v1/users",       tags=["User Management"])
+app.include_router(hr_router,         prefix="/api/v1/hr",          tags=["HR"])
+app.include_router(permission_router, prefix="/api/v1/permissions", tags=["Permissions"])
+
 app.mount("/media", StaticFiles(directory="media_uploads"), name="media")
+
+
+@app.on_event("startup")
+async def verify_super_admin():
+    """Warn if no active SUPER_ADMIN exists in the database."""
+    import logging
+    from database import SessionLocal
+    from models.user import User
+    db = SessionLocal()
+    try:
+        count = db.query(User).filter(
+            User.user_type.in_(["SUPER_ADMIN", "SUPER ADMIN"]),
+            User.is_active == True,
+        ).count()
+        if count == 0:
+            logging.warning("⚠️  No active SUPER_ADMIN user found. Run migrations or create one.")
+    finally:
+        db.close()
 
 @app.get("/health", tags=["System"])
 def health():
