@@ -11,6 +11,8 @@ import Report from './pages/Report';
 import CompanyMaster from './pages/CompanyMaster';
 import ProjectMaster from './pages/ProjectMaster';
 import UserManagement from './pages/UserManagement';
+import UserDetail from './pages/users/UserDetail';
+import CreateUser from './pages/users/CreateUser';
 import GradeSheetImport from './pages/GradeSheetImport';
 import ReferenceDataPage from './pages/ReferenceDataPage';
 import ResourcesPage from './pages/ResourcesPage';
@@ -48,6 +50,8 @@ const App = () => {
         <Route path="companies" element={<CompanyMaster />} />
         <Route path="projects" element={<ProjectMaster />} />
         <Route path="users" element={<UserManagement />} />
+        <Route path="users/new" element={<CreateUser />} />
+        <Route path="users/:id" element={<UserDetail />} />
         <Route path="grade-sheet" element={<GradeSheetImport />} />
         <Route path="reference-data" element={<ReferenceDataPage />} />
         <Route path="resources" element={<ResourcesPage />} />

@@ -4,6 +4,20 @@ export default {
   theme: {
     extend: {
       colors: {
+        navy: {
+          900: '#0a1628',
+          800: '#0f2040',
+          700: '#162850',
+          600: '#1e3460',
+          500: '#2a4a80',
+        },
+        role: {
+          superadmin: '#d4af37',
+          admin:      '#3b82f6',
+          ho:         '#8b5cf6',
+          siteadmin:  '#0d9488',
+          user:       '#64748b',
+        },
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',

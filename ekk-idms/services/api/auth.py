@@ -35,8 +35,8 @@ MODULES = [
     "users",
     "companies",
 ]
-PRIVILEGED_ROLES = {"SUPER ADMIN", "ADMIN"}
-FULL_ACCESS_ROLES = {"SUPER ADMIN", "ADMIN", "SITE-ADMIN"}
+PRIVILEGED_ROLES = {"SUPER ADMIN", "SUPER_ADMIN", "ADMIN"}
+FULL_ACCESS_ROLES = {"SUPER ADMIN", "SUPER_ADMIN", "ADMIN", "SITE-ADMIN", "SITE_ADMIN"}
 
 
 def normalize_user_type(user: User) -> str:

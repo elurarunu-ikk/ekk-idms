@@ -14,6 +14,7 @@ class User(Base):
     role          = Column(String(50))   # director / pm / site_engineer / store_keeper / admin
     contact_no    = Column(String(20))
     user_type     = Column(String(50), nullable=False, server_default=text("'USER'"))
+    user_kind     = Column(String(20), nullable=True, default='internal')
     password_hash = Column(String(500), nullable=False)
     is_active     = Column(Boolean, nullable=False, server_default=text("true"))
     force_password_change = Column(Boolean, nullable=False, server_default=text("false"))

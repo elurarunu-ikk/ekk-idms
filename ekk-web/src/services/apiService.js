@@ -266,4 +266,90 @@ export const deleteMachine = (machineId) =>
 export const listManpowerCategories = (activeOnly = true) =>
   api.get('/api/resources/manpower-categories', { params: { active_only: activeOnly } }).then((r) => r.data);
 
+// ── User Management v2 (IAM) ──────────────────────────────────────────────────
+
+export const listUsersV2 = (params) =>
+  api.get('/api/v1/users/', { params }).then((r) => r.data);
+
+export const getUserById = (id) =>
+  api.get(`/api/v1/users/${id}`).then((r) => r.data);
+
+export const createUserV2 = (payload) =>
+  api.post('/api/v1/users/', payload).then((r) => r.data);
+
+export const updateUserV2 = (id, payload) =>
+  api.put(`/api/v1/users/${id}`, payload).then((r) => r.data);
+
+export const activateUser = (id) =>
+  api.post(`/api/v1/users/${id}/activate`).then((r) => r.data);
+
+export const deactivateUser = (id) =>
+  api.post(`/api/v1/users/${id}/deactivate`).then((r) => r.data);
+
+export const resetUserPassword = (id, payload) =>
+  api.post(`/api/v1/users/${id}/reset-password`, payload).then((r) => r.data);
+
+export const changeMyPassword = (payload) =>
+  api.post('/api/v1/users/me/change-password', payload).then((r) => r.data);
+
+export const cloneUser = (sourceId, payload) =>
+  api.post(`/api/v1/users/${sourceId}/clone`, payload).then((r) => r.data);
+
+export const getUserAuditLog = (id, params) =>
+  api.get(`/api/v1/users/${id}/audit-log`, { params }).then((r) => r.data);
+
+export const getPermissionSummary = (id) =>
+  api.get(`/api/v1/permissions/summary/${id}`).then((r) => r.data);
+
+export const bulkImportUsers = (file, dryRun = true) => {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('dry_run', dryRun);
+  return api.post('/api/v1/users/bulk-import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data);
+};
+
+export const exportUsers = (params) =>
+  api.get('/api/v1/users/export', { params, responseType: 'blob' }).then((r) => r.data);
+
+export const getUserActivity = () =>
+  api.get('/api/v1/users/activity').then((r) => r.data);
+
+export const lookupHR = (q) =>
+  api.get('/api/v1/hr/lookup', { params: { q } }).then((r) => r.data);
+
+export const validatePermissions = (payload) =>
+  api.post('/api/v1/permissions/validate', payload).then((r) => r.data);
+
+export const getRoleSuggestion = (designation, department) =>
+  api.get('/api/v1/hr/role-suggest', { params: { designation, department } }).then((r) => r.data);
+
+export const saveFormRights = (userId, formRights) =>
+  api.post(`/api/v1/permissions/form-rights/${userId}`, { user_type: '', form_rights: formRights }).then((r) => r.data);
+
+export const listSites = (params) =>
+  api.get('/api/v1/sites/', { params }).then((r) => r.data);
+
+export const listModules = () =>
+  api.get('/api/v1/modules/').then((r) => r.data);
+
+export const listForms = (moduleId) =>
+  api.get('/api/v1/forms/', { params: { module_id: moduleId } }).then((r) => r.data);
+
+export const grantTempAccess = (payload) =>
+  api.post('/api/v1/permissions/temp-access', payload).then((r) => r.data);
+
+export const revokeTempAccess = (id) =>
+  api.delete(`/api/v1/permissions/temp-access/${id}/revoke`).then((r) => r.data);
+
+export const impersonateUser = (userId, reason) =>
+  api.post(`/api/v1/users/${userId}/impersonate`, { reason }).then((r) => r.data);
+
+export const endImpersonation = () =>
+  api.post('/api/v1/users/impersonate/end').then((r) => r.data);
+
+export const downloadBulkImportTemplate = () =>
+  api.get('/api/v1/users/import-template', { responseType: 'blob' }).then((r) => r.data);
+
 export default api;
