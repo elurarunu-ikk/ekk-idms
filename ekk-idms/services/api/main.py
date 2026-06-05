@@ -90,6 +90,9 @@ app.include_router(user_mgmt_router,  prefix="/api/v1/users",       tags=["User 
 app.include_router(hr_router,         prefix="/api/v1/hr",          tags=["HR"])
 app.include_router(permission_router, prefix="/api/v1/permissions", tags=["Permissions"])
 
+from routers.master_data_router import router as master_router
+app.include_router(master_router, prefix="/api/masters", tags=["Master Data"])
+
 app.mount("/media", StaticFiles(directory="media_uploads"), name="media")
 
 

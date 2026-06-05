@@ -209,6 +209,8 @@ class CaptureEntryResponse(BaseModel):
     approved_by:      Optional[str] = None
     approved_at:      Optional[datetime] = None
     reject_reason:    Optional[str] = None
+    rejected_by:      Optional[str] = None
+    entered_by:       Optional[str] = None
     contractor_name:  Optional[str] = None
     road_side:        Optional[str] = None
     rfi_number:       Optional[int] = None

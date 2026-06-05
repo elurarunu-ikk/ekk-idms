@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { formatChainage } from '../utils/captureUtils';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -32,6 +34,7 @@ const EntryDetail = () => {
 
   const [approvedBy, setApprovedBy] = useState(localStorage.getItem('username') || '');
   const [rejectReason, setRejectReason] = useState('');
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const isPending = useMemo(() => entry && !entry.approved && !entry.rejected, [entry]);
   const isApproved = useMemo(() => entry?.approved, [entry]);
@@ -153,7 +156,7 @@ const EntryDetail = () => {
 
         {isRejected && (
           <div className="mb-4 rounded-lg bg-red-100 px-4 py-3 text-sm font-medium text-red-800">
-            Rejected: {entry.reject_reason || 'No reason provided'}
+            Rejected by {entry.rejected_by || 'Unknown'}: {entry.reject_reason || 'No reason provided'}
           </div>
         )}
 
@@ -173,8 +176,8 @@ const EntryDetail = () => {
         {/* ── Location ── */}
         <h2 className="mb-2 mt-4 text-sm font-semibold uppercase tracking-wide text-gray-500">Location</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage From</p><p className="text-sm text-gray-900">{entry.chainage_from ?? '-'}</p></div>
-          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage To</p><p className="text-sm text-gray-900">{entry.chainage_to ?? '-'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage From</p><p className="text-sm font-mono text-gray-900">{formatChainage(entry.chainage_from)}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Chainage To</p><p className="text-sm font-mono text-gray-900">{formatChainage(entry.chainage_to)}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Road Side</p><p className="text-sm text-gray-900">{entry.road_side || '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Layer Section</p><p className="text-sm text-gray-900">{entry.layer_section || '-'}</p></div>
           {entry.gps_start_lat && (
@@ -205,6 +208,7 @@ const EntryDetail = () => {
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Progress</p><p className="text-sm text-gray-900">{entry.progress_status || '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Entry Date</p><p className="text-sm text-gray-900">{entry.entry_date ? new Date(entry.entry_date).toLocaleDateString() : '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Payment Qualifies</p><p className="text-sm text-gray-900">{entry.payment_qualifies ? 'Yes' : 'No'}</p></div>
+          <div className={fieldRowClass}><p className="text-xs text-gray-500">Entered By</p><p className="text-sm text-gray-900">{entry.entered_by || '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Created At</p><p className="text-sm text-gray-900">{new Date(entry.created_at).toLocaleString()}</p></div>
           {entry.remarks && (
             <div className={`${fieldRowClass} md:col-span-2`}><p className="text-xs text-gray-500">Remarks</p><p className="text-sm text-gray-900">{entry.remarks}</p></div>
@@ -321,70 +325,156 @@ const EntryDetail = () => {
 
         <div className="mt-6">
           <h2 className="mb-3 text-lg font-semibold text-gray-900">Entry Images</h2>
-          {mediaItems.filter((m) => m.media_type === 'photo').length === 0 ? (
-            <p className="text-sm text-gray-500">No images uploaded for this entry.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {mediaItems
-                .filter((m) => m.media_type === 'photo')
-                .map((m) => {
-                  const src = m.url?.startsWith('http') ? m.url : `${API_BASE}${m.url}`;
-                  return (
-                    <a key={m.id} href={src} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-                      <img src={src} alt={m.filename || 'Entry image'} className="h-32 w-full object-cover" />
-                      <div className="px-2 py-1 text-xs text-gray-600">{m.filename || 'image'}</div>
-                    </a>
-                  );
-                })}
-            </div>
-          )}
+          {(() => {
+            const photos = mediaItems.filter((m) => m.media_type === 'photo');
+            const videos = mediaItems.filter((m) => m.media_type === 'video');
+            if (photos.length === 0 && videos.length === 0) {
+              return <p className="text-sm text-gray-500">No media uploaded for this entry.</p>;
+            }
+            return (
+              <>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {photos.map((m, i) => {
+                    const src = m.url?.startsWith('http') ? m.url : `${API_BASE}${m.url}`;
+                    return (
+                      <div key={m.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white cursor-pointer"
+                        onClick={() => setLightboxIndex(i)}>
+                        <img
+                          src={src}
+                          alt={m.filename || 'Entry image'}
+                          className="h-32 w-full object-cover hover:opacity-90 transition"
+                        />
+                        <div className="px-2 py-1 text-xs text-gray-600">{m.filename || 'image'}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Video section */}
+                {videos.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                      Videos ({videos.length})
+                    </p>
+                    <div className="space-y-3">
+                      {videos.map((m, i) => {
+                        const src = m.url?.startsWith('http') ? m.url : `${API_BASE}${m.url}`;
+                        return (
+                          <div key={i} className="rounded-lg overflow-hidden border border-gray-200">
+                            <video
+                              controls
+                              preload="metadata"
+                              className="w-full max-h-64 bg-black"
+                              src={src}
+                            >
+                              Your browser does not support video playback.
+                            </video>
+                            <div className="px-2 py-1 text-xs text-gray-600 flex justify-between">
+                              <span>{m.filename || 'video'}</span>
+                              <span>{m.size_mb ? `${m.size_mb.toFixed(1)} MB` : ''}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Lightbox */}
+                {lightboxIndex !== null && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+                    onClick={() => setLightboxIndex(null)}
+                  >
+                    <button
+                      className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10
+                                 p-3 text-white hover:bg-white/20 transition"
+                      onClick={e => { e.stopPropagation(); setLightboxIndex(i => Math.max(0, i - 1)); }}
+                    >
+                      <ChevronLeft className="w-6 h-6" />
+                    </button>
+                    <img
+                      src={photos[lightboxIndex]?.url?.startsWith('http')
+                        ? photos[lightboxIndex].url
+                        : `${API_BASE}${photos[lightboxIndex]?.url}`}
+                      alt="Full size"
+                      className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
+                      onClick={e => e.stopPropagation()}
+                    />
+                    <button
+                      className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10
+                                 p-3 text-white hover:bg-white/20 transition"
+                      onClick={e => { e.stopPropagation(); setLightboxIndex(i => Math.min(photos.length - 1, i + 1)); }}
+                    >
+                      <ChevronRight className="w-6 h-6" />
+                    </button>
+                    <button
+                      className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+                      onClick={() => setLightboxIndex(null)}
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                    <div className="absolute bottom-4 text-white text-sm">
+                      {lightboxIndex + 1} / {photos.length}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-2">
+        {/* Sticky action bar */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3
+                        flex items-center gap-2 flex-wrap mt-4 -mx-6 -mb-6 rounded-b-xl">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2
+                       text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </button>
+          <div className="flex-1" />
           {(isPending || isRejected) && (
             <button
               type="button"
               onClick={() => navigate(`/captures/${id}/edit`)}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium
+                         text-gray-700 hover:bg-gray-50 transition"
             >
               Edit
             </button>
           )}
-
           {isPending && (
             <button
               type="button"
               onClick={() => setShowApproveModal(true)}
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-700"
+              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white
+                         hover:bg-green-700 transition"
             >
-              Approve
+              ✓ Approve
             </button>
           )}
-
           {isPending && (
             <button
               type="button"
               onClick={() => setShowRejectModal(true)}
-              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-amber-600"
+              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white
+                         hover:bg-amber-600 transition"
             >
-              Reject
+              ✕ Reject
             </button>
           )}
-
           {(isPending || isRejected) && (
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white
+                         hover:bg-red-700 transition"
             >
               Delete
             </button>
-          )}
-
-          {isApproved && (
-            <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800">
-              Approved
-            </span>
           )}
         </div>
       </div>
@@ -399,40 +489,15 @@ const EntryDetail = () => {
         confirmClassName="bg-red-600 hover:bg-red-700"
       />
 
-      {showApproveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
-            <h3 className="text-lg font-semibold text-gray-900">Approve Entry</h3>
-            <p className="mt-1 text-sm text-gray-600">Enter approver name to confirm approval.</p>
-
-            <input
-              type="text"
-              value={approvedBy}
-              onChange={(e) => setApprovedBy(e.target.value)}
-              className="mt-4 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-              placeholder="Approved by"
-            />
-
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowApproveModal(false)}
-                className="rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={processing}
-                onClick={handleApprove}
-                className="rounded-lg bg-green-600 px-4 py-2 font-medium text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {processing ? 'Approving...' : 'Confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showApproveModal}
+        title="Approve entry?"
+        message={`Approved by: ${approvedBy || localStorage.getItem('username') || 'Unknown'}`}
+        onConfirm={handleApprove}
+        onCancel={() => setShowApproveModal(false)}
+        confirmLabel={processing ? 'Approving...' : 'Approve'}
+        confirmClassName="bg-green-600 hover:bg-green-700"
+      />
 
       {showRejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

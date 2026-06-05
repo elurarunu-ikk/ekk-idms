@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 # ── Required by alembic ───────────────────────────────────────────────────────
-revision = 'a1b2c3d4e5f6'
+revision = 'a0b0c0d0e0f0'
 down_revision = None        # set to your last revision ID if you have prior migrations
 branch_labels = None
 depends_on = None

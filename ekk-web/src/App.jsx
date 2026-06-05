@@ -16,6 +16,7 @@ import CreateUser from './pages/users/CreateUser';
 import GradeSheetImport from './pages/GradeSheetImport';
 import ReferenceDataPage from './pages/ReferenceDataPage';
 import ResourcesPage from './pages/ResourcesPage';
+import MastersPage from './pages/MastersPage';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -55,6 +56,7 @@ const App = () => {
         <Route path="grade-sheet" element={<GradeSheetImport />} />
         <Route path="reference-data" element={<ReferenceDataPage />} />
         <Route path="resources" element={<ResourcesPage />} />
+        <Route path="masters" element={<MastersPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

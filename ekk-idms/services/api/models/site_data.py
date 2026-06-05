@@ -33,6 +33,8 @@ class SiteDataTransaction(Base):
     approved_by      = Column(String(200))
     approved_at      = Column(DateTime)
     reject_reason    = Column(String(500))
+    rejected_by      = Column(String(200))
+    entered_by       = Column(String(200))
     contractor_name  = Column(String(200))
     road_side        = Column(String(10))
     rfi_number       = Column(Integer)

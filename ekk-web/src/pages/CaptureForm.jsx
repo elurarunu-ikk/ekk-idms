@@ -4,30 +4,32 @@ import toast from 'react-hot-toast';
 import { createCapture, getApiErrorMessage, getCapture, updateCapture } from '../services/apiService';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useProjectSession from '../hooks/useProjectSession';
+import {
+  deriveStage,
+} from '../utils/captureUtils';
+import {
+  getWorkTypes, getLayers, getActivities,
+  getElements, getStructureTypes, getStructureActivities,
+} from '../services/mastersService';
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Local constants (not in captureUtils) ────────────────────────────────────
 
-const WORK_TYPES = ['ROAD', 'STRUCTURE', 'DRAIN', 'ANCILLARY', 'MISC'];
-const LAYERS = [
-  { code: '', label: '— Select Layer —' },
-  { code: 'EMBANKMENT', label: 'Embankment' },
-  { code: 'SUBGRADE', label: 'Subgrade' },
-  { code: 'GSB', label: 'GSB' },
-  { code: 'CTSB', label: 'CTSB' },
-  { code: 'CTB', label: 'CTB' },
-  { code: 'WMM', label: 'WMM' },
-  { code: 'BASE', label: 'Base Course' },
-  { code: 'BINDER', label: 'Binder Course (DBM)' },
-  { code: 'WEARING', label: 'Wearing Course (BC)' },
-  { code: 'PRIME', label: 'Prime Coat' },
-  { code: 'TACK', label: 'Tack Coat' },
-  { code: 'SHOULDER', label: 'Shoulder' },
-  { code: 'MEDIAN', label: 'Median' },
-];
-const ELEMENTS = ['', 'FOUNDATION', 'FOOTING', 'PIER', 'PIER_CAP', 'ABUTMENT', 'DECK', 'GIRDER', 'SLAB', 'WING_WALL', 'BEARING', 'EXPANSION_JOINT'];
 const ROAD_SIDES = ['LHS', 'RHS', 'Both', 'Median'];
-const WEATHER_OPTIONS = ['', 'SUNNY', 'CLOUDY', 'RAINY'];
-const PROGRESS_OPTIONS = ['', 'STARTED', 'ONGOING', 'COMPLETED'];
+
+const WEATHER_OPTIONS = [
+  { value: '',       label: '— Select —' },
+  { value: 'SUNNY',  label: 'Sunny' },
+  { value: 'CLOUDY', label: 'Cloudy' },
+  { value: 'RAINY',  label: 'Rainy' },
+];
+
+const PROGRESS_OPTIONS = [
+  { value: '',          label: '— Select —' },
+  { value: 'STARTED',   label: 'Started' },
+  { value: 'ONGOING',   label: 'In Progress' },
+  { value: 'COMPLETED', label: 'Completed' },
+];
+
 const UNITS = ['', 'CUM', 'MT', 'KG', 'SQM', 'LM', 'BAG', 'NOS', 'LTR', 'TON'];
 
 const MATERIAL_CODES = [
@@ -47,14 +49,15 @@ const MANPOWER_CATEGORIES = [
 ];
 const SHIFT_TYPES = ['DAY', 'NIGHT', 'GENERAL'];
 
-const emptyMaterial  = () => ({ material_code: '', quantity: '', unit: '', source: '' });
-const emptyMachine   = () => ({ machine_code: '', count: 1, hours: '', operator_name: '' });
-const emptyManpower  = () => ({ category: '', count: '', shift_type: 'DAY' });
+const emptyMaterial = () => ({ material_code: '', quantity: '', unit: '', source: '' });
+const emptyMachine  = () => ({ machine_code: '', count: 1, hours: '', operator_name: '' });
+const emptyManpower = () => ({ category: '', count: '', shift_type: 'DAY' });
 
 const initialForm = {
-  project_id: '', work_type: 'ROAD', activity_code: '',
+  project_id: '', work_type: 'ROAD',
+  activity_code: '',
   layer_code: '', element_code: '', structure_type: '',
-  chainage_from: '', chainage_to: '', stage: '',
+  chainage_from: '', chainage_to: '',
   quantity_lm: '', quantity: '', unit: '',
   length_m: '', width_m: '', depth_m: '',
   contractor_name: '', road_side: 'LHS', rfi_number: '',
@@ -62,11 +65,11 @@ const initialForm = {
   entry_date: '', remarks: '',
 };
 
-// ── Shared input class ────────────────────────────────────────────────────────
+// ── Shared input classes ──────────────────────────────────────────────────────
 const inp = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none';
 const sel = inp;
 
-// ── Sub-component: 3M table editor ───────────────────────────────────────────
+// ── 3M editor sub-components (unchanged) ─────────────────────────────────────
 
 function MaterialsEditor({ rows, setRows }) {
   const update = (i, key, val) => setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [key]: val } : r));
@@ -233,7 +236,7 @@ function ManpowerEditor({ rows, setRows }) {
   );
 }
 
-// ── Main form ────────────────────────────────────────────────────────────────
+// ── Main form ─────────────────────────────────────────────────────────────────
 
 const CaptureForm = () => {
   const navigate = useNavigate();
@@ -243,19 +246,31 @@ const CaptureForm = () => {
 
   const [formData, setFormData] = useState(initialForm);
   const [manualQuantity, setManualQuantity] = useState(false);
+  const [manualActivity, setManualActivity] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
 
-  const [materialsUsed, setMaterialsUsed] = useState([]);
+  const [materialsUsed, setMaterialsUsed]       = useState([]);
   const [machinesDeployed, setMachinesDeployed] = useState([]);
   const [manpowerDeployed, setManpowerDeployed] = useState([]);
 
+  // ── Master data from API ──────────────────────────────────────────────────
+  const [masterWorkTypes,   setMasterWorkTypes]   = useState([]);
+  const [masterLayers,      setMasterLayers]      = useState([]);
+  const [masterStructTypes, setMasterStructTypes] = useState([]);
+  const [masterElements,    setMasterElements]    = useState([]);
+  const [masterActivities,  setMasterActivities]  = useState([]);
+  const [mastersLoading,    setMastersLoading]    = useState(true);
+
+  // ── Project pre-fill ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!isEdit && selectedProjectId) {
-      setFormData(prev => prev.project_id === selectedProjectId ? prev : { ...prev, project_id: selectedProjectId });
+      setFormData(prev => prev.project_id === selectedProjectId
+        ? prev : { ...prev, project_id: selectedProjectId });
     }
   }, [isEdit, selectedProjectId]);
 
+  // ── Load existing entry for edit ──────────────────────────────────────────
   useEffect(() => {
     if (!isEdit) return;
     const fetchEntry = async () => {
@@ -276,7 +291,6 @@ const CaptureForm = () => {
           structure_type:  entry.structure_type || '',
           chainage_from:   entry.chainage_from ?? '',
           chainage_to:     entry.chainage_to ?? '',
-          stage:           entry.stage || '',
           quantity_lm:     entry.quantity_lm ?? '',
           quantity:        entry.quantity ?? '',
           unit:            entry.unit || '',
@@ -318,18 +332,132 @@ const CaptureForm = () => {
     fetchEntry();
   }, [id, isEdit, navigate]);
 
+  // Auto-enable manual mode when editing a legacy/unknown activity code
+  useEffect(() => {
+    if (isEdit && formData.activity_code && masterActivities.length > 0) {
+      const known = masterActivities.find(a => a.code === formData.activity_code);
+      if (!known) setManualActivity(true);
+    }
+  }, [isEdit, formData.activity_code, masterActivities]);
+
+  // ── Auto-derive quantity_lm from chainage diff ────────────────────────────
   useEffect(() => {
     if (manualQuantity) return;
     const from = Number(formData.chainage_from);
     const to   = Number(formData.chainage_to);
-    if (!Number.isNaN(from) && !Number.isNaN(to) && formData.chainage_from !== '' && formData.chainage_to !== '') {
-      const qty = (to - from).toFixed(3);
-      if (qty > 0) setFormData(prev => prev.quantity_lm === qty ? prev : { ...prev, quantity_lm: qty });
+    if (!Number.isNaN(from) && !Number.isNaN(to) &&
+        formData.chainage_from !== '' && formData.chainage_to !== '') {
+      const qty = ((to - from) * 1000).toFixed(3);
+      if (Number(qty) > 0)
+        setFormData(prev => prev.quantity_lm === qty ? prev : { ...prev, quantity_lm: qty });
     }
   }, [formData.chainage_from, formData.chainage_to, manualQuantity]);
 
+  // ── Master data loading ───────────────────────────────────────────────────
+
+  // Load static masters on mount (work types, layers, structure types)
+  useEffect(() => {
+    const loadStaticMasters = async () => {
+      try {
+        const [wts, lyrs, stts] = await Promise.all([
+          getWorkTypes(true),
+          getLayers(null, true),
+          getStructureTypes(true),
+        ]);
+        setMasterWorkTypes(wts);
+        setMasterLayers(lyrs);
+        setMasterStructTypes(stts);
+      } catch (err) {
+        console.warn('Failed to load master work types/layers:', err.message);
+      } finally {
+        setMastersLoading(false);
+      }
+    };
+    loadStaticMasters();
+  }, []);
+
+  // Load elements when structure type changes (STRUCTURE work type)
+  useEffect(() => {
+    if (formData.work_type !== 'STRUCTURE' || !formData.structure_type) {
+      setMasterElements([]);
+      return;
+    }
+    getElements(true)
+      .then(allElements => setMasterElements(allElements))
+      .catch(err => console.warn('Failed to load elements:', err.message));
+  }, [formData.structure_type, formData.work_type]);
+
+  // Load activities based on current work type + layer/element selection
+  useEffect(() => {
+    const loadActivities = async () => {
+      try {
+        if (!formData.work_type) {
+          setMasterActivities([]);
+          return;
+        }
+        if (formData.work_type === 'ROAD') {
+          const acts = await getActivities('ROAD', formData.layer_code || null, true);
+          setMasterActivities(acts);
+          return;
+        }
+        if (formData.work_type === 'STRUCTURE') {
+          if (formData.structure_type && formData.element_code) {
+            const acts = await getStructureActivities(formData.structure_type, formData.element_code);
+            setMasterActivities(acts);
+            return;
+          }
+          const acts = await getActivities('STRUCTURE', null, true);
+          setMasterActivities(acts);
+          return;
+        }
+        const acts = await getActivities(formData.work_type, null, true);
+        setMasterActivities(acts);
+      } catch (err) {
+        console.warn('Failed to load activities:', err.message);
+        setMasterActivities([]);
+      }
+    };
+    loadActivities();
+  }, [formData.work_type, formData.layer_code, formData.structure_type, formData.element_code]);
+
+  // ── Cascade reset helpers ─────────────────────────────────────────────────
   const updateField = (key, value) => setFormData(prev => ({ ...prev, [key]: value }));
 
+  const updateWorkType = (newWorkType) => {
+    setFormData(prev => ({
+      ...prev,
+      work_type: newWorkType,
+      layer_code: '', element_code: '', structure_type: '', activity_code: '',
+    }));
+    setManualActivity(false);
+  };
+
+  const updateLayer = (newLayer) =>
+    setFormData(prev => ({ ...prev, layer_code: newLayer, activity_code: '' }));
+
+  const updateStructureType = (newType) =>
+    setFormData(prev => ({ ...prev, structure_type: newType, element_code: '', activity_code: '' }));
+
+  const updateElement = (newElement) =>
+    setFormData(prev => ({ ...prev, element_code: newElement, activity_code: '' }));
+
+  // ── Filtered activity / element lists (driven by master data state) ────────
+  const availableActivities = useMemo(() => {
+    return masterActivities;
+  }, [masterActivities]);
+
+  const availableElements = useMemo(() => {
+    if (formData.work_type === 'STRUCTURE' && formData.structure_type) {
+      return masterElements;
+    }
+    return masterElements;
+  }, [formData.work_type, formData.structure_type, masterElements]);
+
+  const isLegacyActivity = formData.activity_code &&
+    masterActivities.length > 0 &&
+    !masterActivities.find(a => a.code === formData.activity_code);
+
+  // ── Validation ────────────────────────────────────────────────────────────
   const validate = () => {
     if (!formData.project_id || !formData.activity_code) {
       toast.error('Project and Activity Code are required');
@@ -344,6 +472,7 @@ const CaptureForm = () => {
     return true;
   };
 
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!validate()) return;
 
@@ -357,9 +486,13 @@ const CaptureForm = () => {
       layer_code:      s(formData.layer_code),
       element_code:    s(formData.element_code),
       structure_type:  s(formData.structure_type),
+      stage:           deriveStage({
+                         workType:    formData.work_type,
+                         layerCode:   formData.layer_code,
+                         elementCode: formData.element_code,
+                       }) || undefined,
       chainage_from:   n(formData.chainage_from),
       chainage_to:     n(formData.chainage_to),
-      stage:           s(formData.stage),
       quantity_lm:     n(formData.quantity_lm),
       quantity:        n(formData.quantity),
       unit:            s(formData.unit),
@@ -374,7 +507,6 @@ const CaptureForm = () => {
       progress_status: s(formData.progress_status),
       entry_date:      formData.entry_date || undefined,
       remarks:         s(formData.remarks),
-      // 3M arrays — filter out empty rows
       materials_used: materialsUsed
         .filter(m => m.material_code)
         .map(m => ({ material_code: m.material_code, quantity: n(m.quantity), unit: s(m.unit), source: s(m.source) })),
@@ -393,7 +525,7 @@ const CaptureForm = () => {
       } else {
         await createCapture(payload);
       }
-      toast.success('Entry saved successfully');
+      toast.success('Capture saved successfully');
       navigate('/captures');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Something went wrong'));
@@ -402,51 +534,117 @@ const CaptureForm = () => {
     }
   };
 
-  if (loading) return <LoadingSpinner message="Loading entry..." />;
+  if (loading) return <LoadingSpinner message="Loading capture…" />;
 
   return (
     <div className="rounded-xl bg-white p-6 shadow-sm">
-      <h1 className="mb-6 text-2xl font-bold text-gray-900">{isEdit ? 'Edit Entry' : 'New Entry'}</h1>
+      <h1 className="mb-6 text-2xl font-bold text-gray-900">
+        {isEdit ? 'Edit Capture' : 'New Capture'}
+      </h1>
 
       {/* ── Classification ── */}
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Classification</p>
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Project *</label>
-          <div className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-            {selectedProject ? `${selectedProject.project_code} - ${selectedProject.name}` : formData.project_id}
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+            {selectedProject
+              ? `${selectedProject.project_code} - ${selectedProject.name}`
+              : formData.project_id}
           </div>
         </div>
+
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Work Type</label>
-          <select value={formData.work_type} onChange={e => updateField('work_type', e.target.value)} className={sel}>
-            {WORK_TYPES.map(w => <option key={w} value={w}>{w}</option>)}
+          <select value={formData.work_type} onChange={e => updateWorkType(e.target.value)}
+            disabled={mastersLoading} className={sel}>
+            {mastersLoading
+              ? <option>Loading...</option>
+              : masterWorkTypes.map(w => <option key={w.code} value={w.code}>{w.label}</option>)
+            }
           </select>
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Activity Code *</label>
-          <input type="text" value={formData.activity_code} onChange={e => updateField('activity_code', e.target.value)} className={inp} />
-        </div>
+
         {formData.work_type === 'ROAD' && (
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Layer</label>
-            <select value={formData.layer_code} onChange={e => updateField('layer_code', e.target.value)} className={sel}>
-              {LAYERS.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+            <select value={formData.layer_code} onChange={e => updateLayer(e.target.value)} className={sel}>
+              <option value="">— Select Layer —</option>
+              {masterLayers
+                .filter(l => l.work_type_code === 'ROAD')
+                .map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
             </select>
           </div>
         )}
+
+        {formData.work_type === 'STRUCTURE' && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Structure Type</label>
+            <select value={formData.structure_type} onChange={e => updateStructureType(e.target.value)} className={sel}>
+              <option value="">— Select Structure Type —</option>
+              {masterStructTypes.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
+            </select>
+          </div>
+        )}
+
         {formData.work_type === 'STRUCTURE' && (
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Element</label>
-            <select value={formData.element_code} onChange={e => updateField('element_code', e.target.value)} className={sel}>
-              {ELEMENTS.map(e => <option key={e} value={e}>{e || '— Select Element —'}</option>)}
+            <select value={formData.element_code} onChange={e => updateElement(e.target.value)}
+              className={sel} disabled={!formData.structure_type}>
+              <option value="">
+                {formData.structure_type ? '— Select Element —' : '— Select structure type first —'}
+              </option>
+              {availableElements.map(el => <option key={el.code} value={el.code}>{el.label}</option>)}
             </select>
           </div>
         )}
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Stage</label>
-          <input type="text" value={formData.stage} onChange={e => updateField('stage', e.target.value)} placeholder="e.g. SUBGRADE, WMM, DBM" className={inp} />
+
+        <div className="md:col-span-2">
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-sm font-medium text-gray-700">Activity Code *</label>
+            <button type="button" onClick={() => setManualActivity(p => !p)}
+              className="text-xs font-medium text-blue-600 hover:text-blue-700">
+              {manualActivity ? 'Use list' : 'Type manually'}
+            </button>
+          </div>
+
+          {manualActivity ? (
+            <input type="text" value={formData.activity_code}
+              onChange={e => setFormData(prev => ({ ...prev, activity_code: e.target.value.toUpperCase() }))}
+              placeholder="Type activity code (e.g. WMM_LAY)"
+              className={inp} />
+          ) : (
+            <select value={formData.activity_code}
+              onChange={e => setFormData(prev => ({ ...prev, activity_code: e.target.value }))}
+              className={sel}>
+              <option value="">— Select Activity —</option>
+              {availableActivities.map(a => (
+                <option key={a.code} value={a.code}>{a.code} — {a.label}</option>
+              ))}
+              {isLegacyActivity && (
+                <option value={formData.activity_code}>
+                  {formData.activity_code} (legacy — consider updating)
+                </option>
+              )}
+            </select>
+          )}
+
+          {!manualActivity && formData.work_type === 'ROAD' && !formData.layer_code && (
+            <p className="mt-1 text-xs text-gray-400">Select a layer above to filter activities</p>
+          )}
+          {!manualActivity && formData.work_type === 'STRUCTURE' && !formData.structure_type && (
+            <p className="mt-1 text-xs text-gray-400">Select structure type and element to filter activities</p>
+          )}
+          {isLegacyActivity && !manualActivity && (
+            <p className="mt-1 text-xs text-amber-600">
+              ⚠ Current code "{formData.activity_code}" is not in the standard list.
+              Select from list or use "Type manually" to keep it.
+            </p>
+          )}
         </div>
+
       </div>
 
       {/* ── Location ── */}
@@ -454,11 +652,13 @@ const CaptureForm = () => {
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Chainage From</label>
-          <input type="number" step="0.001" value={formData.chainage_from} onChange={e => updateField('chainage_from', e.target.value)} className={inp} />
+          <input type="number" step="0.001" value={formData.chainage_from}
+            onChange={e => updateField('chainage_from', e.target.value)} className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Chainage To</label>
-          <input type="number" step="0.001" value={formData.chainage_to} onChange={e => updateField('chainage_to', e.target.value)} className={inp} />
+          <input type="number" step="0.001" value={formData.chainage_to}
+            onChange={e => updateField('chainage_to', e.target.value)} className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Road Side</label>
@@ -468,7 +668,8 @@ const CaptureForm = () => {
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Layer Section</label>
-          <input type="text" value={formData.layer_section} onChange={e => updateField('layer_section', e.target.value)} className={inp} />
+          <input type="text" value={formData.layer_section}
+            onChange={e => updateField('layer_section', e.target.value)} className={inp} />
         </div>
       </div>
 
@@ -478,13 +679,19 @@ const CaptureForm = () => {
         <div>
           <div className="mb-1 flex items-center justify-between">
             <label className="block text-sm font-medium text-gray-700">Quantity (LM)</label>
-            <button type="button" onClick={() => setManualQuantity(p => !p)} className="text-xs font-medium text-blue-600 hover:text-blue-700">{manualQuantity ? 'Use Auto' : 'Override'}</button>
+            <button type="button" onClick={() => setManualQuantity(p => !p)}
+              className="text-xs font-medium text-blue-600 hover:text-blue-700">
+              {manualQuantity ? 'Use Auto' : 'Override'}
+            </button>
           </div>
-          <input type="number" step="0.001" value={formData.quantity_lm} onChange={e => { setManualQuantity(true); updateField('quantity_lm', e.target.value); }} className={inp} />
+          <input type="number" step="0.001" value={formData.quantity_lm}
+            onChange={e => { setManualQuantity(true); updateField('quantity_lm', e.target.value); }}
+            className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Quantity</label>
-          <input type="number" step="0.001" value={formData.quantity} onChange={e => updateField('quantity', e.target.value)} className={inp} />
+          <input type="number" step="0.001" value={formData.quantity}
+            onChange={e => updateField('quantity', e.target.value)} className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Unit</label>
@@ -494,15 +701,18 @@ const CaptureForm = () => {
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Length (m)</label>
-          <input type="number" step="0.001" value={formData.length_m} onChange={e => updateField('length_m', e.target.value)} className={inp} />
+          <input type="number" step="0.001" value={formData.length_m}
+            onChange={e => updateField('length_m', e.target.value)} className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Width (m)</label>
-          <input type="number" step="0.001" value={formData.width_m} onChange={e => updateField('width_m', e.target.value)} className={inp} />
+          <input type="number" step="0.001" value={formData.width_m}
+            onChange={e => updateField('width_m', e.target.value)} className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Depth (m)</label>
-          <input type="number" step="0.001" value={formData.depth_m} onChange={e => updateField('depth_m', e.target.value)} className={inp} />
+          <input type="number" step="0.001" value={formData.depth_m}
+            onChange={e => updateField('depth_m', e.target.value)} className={inp} />
         </div>
       </div>
 
@@ -511,44 +721,56 @@ const CaptureForm = () => {
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Contractor</label>
-          <input type="text" value={formData.contractor_name} onChange={e => updateField('contractor_name', e.target.value)} className={inp} />
+          <input type="text" value={formData.contractor_name}
+            onChange={e => updateField('contractor_name', e.target.value)} className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">RFI Number</label>
-          <input type="number" step="1" value={formData.rfi_number} onChange={e => updateField('rfi_number', e.target.value)} className={inp} />
+          <input type="number" step="1" value={formData.rfi_number}
+            onChange={e => updateField('rfi_number', e.target.value)} className={inp} />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Weather</label>
-          <select value={formData.weather_code} onChange={e => updateField('weather_code', e.target.value)} className={sel}>
-            {WEATHER_OPTIONS.map(w => <option key={w} value={w}>{w || '— Select —'}</option>)}
+          <select value={formData.weather_code}
+            onChange={e => updateField('weather_code', e.target.value)} className={sel}>
+            {WEATHER_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
           </select>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Progress</label>
-          <select value={formData.progress_status} onChange={e => updateField('progress_status', e.target.value)} className={sel}>
-            {PROGRESS_OPTIONS.map(p => <option key={p} value={p}>{p || '— Select —'}</option>)}
+          <select value={formData.progress_status}
+            onChange={e => updateField('progress_status', e.target.value)} className={sel}>
+            {PROGRESS_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Entry Date</label>
-          <input type="date" value={formData.entry_date} onChange={e => updateField('entry_date', e.target.value)} className={inp} />
+          <input type="date" value={formData.entry_date}
+            onChange={e => updateField('entry_date', e.target.value)} className={inp} />
         </div>
         <div className="md:col-span-2">
           <label className="mb-1 block text-sm font-medium text-gray-700">Remarks</label>
-          <textarea rows={2} value={formData.remarks} onChange={e => updateField('remarks', e.target.value)} className={inp} />
+          <textarea rows={2} value={formData.remarks}
+            onChange={e => updateField('remarks', e.target.value)} className={inp} />
         </div>
       </div>
 
       {/* ── 3M Resources ── */}
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">3M Resources — Materials / Machines / Manpower</p>
-      <MaterialsEditor rows={materialsUsed} setRows={setMaterialsUsed} />
-      <MachinesEditor  rows={machinesDeployed} setRows={setMachinesDeployed} />
-      <ManpowerEditor  rows={manpowerDeployed} setRows={setManpowerDeployed} />
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        3M Resources — Materials / Machines / Manpower
+      </p>
+      <MaterialsEditor rows={materialsUsed}     setRows={setMaterialsUsed} />
+      <MachinesEditor  rows={machinesDeployed}  setRows={setMachinesDeployed} />
+      <ManpowerEditor  rows={manpowerDeployed}  setRows={setManpowerDeployed} />
 
       <div className="mt-6 flex justify-end gap-3">
-        <button type="button" onClick={() => navigate(-1)} className="rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-200">Cancel</button>
-        <button type="button" onClick={handleSave} disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70">
-          {saving ? 'Saving...' : 'Save Entry'}
+        <button type="button" onClick={() => navigate(-1)}
+          className="rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-200">
+          Cancel
+        </button>
+        <button type="button" onClick={handleSave} disabled={saving}
+          className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70">
+          {saving ? 'Saving…' : 'Save Capture'}
         </button>
       </div>
     </div>

@@ -29,41 +29,8 @@ def create_capture(
     user: User = Depends(get_current_user),
 ):
     ensure_project_action(db, user, payload.project_id, "capture", "add")
-    entry = SiteDataTransaction(
-        id=uuid.uuid4(),
-        project_id=payload.project_id,
-        source="manual",
-        activity_code=payload.activity_code,
-        chainage_from=payload.chainage_from,
-        chainage_to=payload.chainage_to,
-        stage=payload.stage,
-        quantity_lm=payload.quantity_lm,
-        quantity=payload.quantity,
-        unit=payload.unit,
-        work_type=payload.work_type,
-        structure_type=payload.structure_type,
-        layer_code=payload.layer_code or payload.layer,
-        element_code=payload.element_code or payload.element,
-        length_m=payload.length_m,
-        width_m=payload.width_m,
-        depth_m=payload.depth_m,
-        contractor_name=payload.contractor_name,
-        road_side=payload.road_side,
-        rfi_number=payload.rfi_number,
-        layer_section=payload.layer_section,
-        remarks=payload.remarks,
-        gps_start_lat=payload.gps_start_lat,
-        gps_start_lng=payload.gps_start_lng,
-        gps_end_lat=payload.gps_end_lat,
-        gps_end_lng=payload.gps_end_lng,
-        gps_accuracy_m=payload.gps_accuracy_m,
-        weather_code=payload.weather_code,
-        progress_status=payload.progress_status,
-        approved=False,
-        rejected=False,
-        payment_qualifies=False,
-        entry_date=payload.entry_date or datetime.utcnow(),
-    )
+    entry = _build_base_entry(payload, user)
+    entry.source = "manual"
     db.add(entry)
     try:
         db.commit()
@@ -83,11 +50,24 @@ def list_captures(
     approved: Optional[bool] = Query(None),
     rejected: Optional[bool] = Query(None),
     stage: Optional[str] = Query(None),
+    # Extended filter params
+    work_type: Optional[str] = Query(None),
+    layer_code: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    contractor: Optional[str] = Query(None),
+    chainage_min: Optional[float] = Query(None),
+    chainage_max: Optional[float] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query("created_at"),
+    sort_order: Optional[str] = Query("desc"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, le=500),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from sqlalchemy import or_, asc, desc
+
     q = db.query(SiteDataTransaction)
 
     if user.user_type not in {"SUPER ADMIN", "ADMIN"}:
@@ -103,9 +83,49 @@ def list_captures(
         q = q.filter(SiteDataTransaction.rejected == rejected)
     if stage:
         q = q.filter(SiteDataTransaction.stage == stage)
+    if work_type:
+        q = q.filter(SiteDataTransaction.work_type == work_type)
+    if layer_code:
+        q = q.filter(SiteDataTransaction.layer_code == layer_code)
+    if contractor:
+        q = q.filter(SiteDataTransaction.contractor_name.ilike(f"%{contractor}%"))
+    if search:
+        q = q.filter(or_(
+            SiteDataTransaction.activity_code.ilike(f"%{search}%"),
+            SiteDataTransaction.contractor_name.ilike(f"%{search}%"),
+            SiteDataTransaction.stage.ilike(f"%{search}%"),
+        ))
+    if chainage_min is not None:
+        q = q.filter(SiteDataTransaction.chainage_from >= chainage_min)
+    if chainage_max is not None:
+        q = q.filter(SiteDataTransaction.chainage_to <= chainage_max)
+    if date_from:
+        try:
+            from datetime import date
+            q = q.filter(SiteDataTransaction.entry_date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import date
+            q = q.filter(SiteDataTransaction.entry_date <= date.fromisoformat(date_to))
+        except ValueError:
+            pass
+
+    # Sorting
+    sort_col_map = {
+        "created_at":    SiteDataTransaction.created_at,
+        "activity_code": SiteDataTransaction.activity_code,
+        "work_type":     SiteDataTransaction.work_type,
+        "chainage_from": SiteDataTransaction.chainage_from,
+        "quantity_lm":   SiteDataTransaction.quantity_lm,
+        "entry_date":    SiteDataTransaction.entry_date,
+    }
+    col = sort_col_map.get(sort_by, SiteDataTransaction.created_at)
+    q = q.order_by(asc(col) if sort_order == "asc" else desc(col))
 
     total = q.count()
-    entries = q.order_by(SiteDataTransaction.created_at.desc()).offset(skip).limit(limit).all()
+    entries = q.offset(skip).limit(limit).all()
 
     return CaptureListResponse(total=total, entries=entries)
 
@@ -113,9 +133,21 @@ def list_captures(
 @router.get("/pending", response_model=CaptureListResponse, summary="List entries pending approval")
 def list_pending(
     project_id: Optional[uuid.UUID] = Query(None),
+    work_type: Optional[str] = Query(None),
+    layer_code: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    contractor: Optional[str] = Query(None),
+    chainage_min: Optional[float] = Query(None),
+    chainage_max: Optional[float] = Query(None),
+    sort_by: Optional[str] = Query("created_at"),
+    sort_order: Optional[str] = Query("asc"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(500, le=1000),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from sqlalchemy import or_, asc, desc
+
     q = db.query(SiteDataTransaction).filter(
         SiteDataTransaction.approved == False,
         SiteDataTransaction.rejected == False,
@@ -126,9 +158,34 @@ def list_pending(
     if project_id:
         ensure_project_action(db, user, project_id, "approvals", "view")
         q = q.filter(SiteDataTransaction.project_id == project_id)
+    if work_type:
+        q = q.filter(SiteDataTransaction.work_type == work_type)
+    if layer_code:
+        q = q.filter(SiteDataTransaction.layer_code == layer_code)
+    if contractor:
+        q = q.filter(SiteDataTransaction.contractor_name.ilike(f"%{contractor}%"))
+    if search:
+        q = q.filter(or_(
+            SiteDataTransaction.activity_code.ilike(f"%{search}%"),
+            SiteDataTransaction.contractor_name.ilike(f"%{search}%"),
+            SiteDataTransaction.stage.ilike(f"%{search}%"),
+        ))
+    if chainage_min is not None:
+        q = q.filter(SiteDataTransaction.chainage_from >= chainage_min)
+    if chainage_max is not None:
+        q = q.filter(SiteDataTransaction.chainage_to <= chainage_max)
+
+    sort_col_map = {
+        "created_at":    SiteDataTransaction.created_at,
+        "activity_code": SiteDataTransaction.activity_code,
+        "chainage_from": SiteDataTransaction.chainage_from,
+        "quantity_lm":   SiteDataTransaction.quantity_lm,
+    }
+    col = sort_col_map.get(sort_by, SiteDataTransaction.created_at)
+    q = q.order_by(asc(col) if sort_order == "asc" else desc(col))
 
     total = q.count()
-    entries = q.order_by(SiteDataTransaction.created_at.desc()).all()
+    entries = q.offset(skip).limit(limit).all()
     return CaptureListResponse(total=total, entries=entries)
 
 
@@ -236,6 +293,7 @@ def reject_capture(
 
     entry.rejected = True
     entry.reject_reason = payload.reason
+    entry.rejected_by = user.full_name or user.username or user.email
     entry.approved = False
     entry.approved_by = None
     entry.approved_at = None
@@ -292,8 +350,9 @@ def _check_boq_balance(
     return warnings
 
 
-def _build_base_entry(payload: ManualCaptureRequest, user_email: str) -> SiteDataTransaction:
+def _build_base_entry(payload: ManualCaptureRequest, user: "User") -> SiteDataTransaction:
     """Construct a SiteDataTransaction ORM object from a capture payload."""
+    entered_by = user.full_name or user.username or user.email
     return SiteDataTransaction(
         id=uuid.uuid4(),
         project_id=payload.project_id,
@@ -328,6 +387,7 @@ def _build_base_entry(payload: ManualCaptureRequest, user_email: str) -> SiteDat
         rejected=False,
         payment_qualifies=False,
         entry_date=payload.entry_date or datetime.utcnow(),
+        entered_by=entered_by,
     )
 
 
@@ -368,7 +428,7 @@ def create_capture_with_resources(
         )
 
     # Build base entry
-    entry = _build_base_entry(payload, user.email)
+    entry = _build_base_entry(payload, user)
     entry.source = "voice" if payload.voice_transcript else "manual"
 
     # Attach 3M data as JSONB

@@ -352,4 +352,10 @@ export const endImpersonation = () =>
 export const downloadBulkImportTemplate = () =>
   api.get('/api/v1/users/import-template', { responseType: 'blob' }).then((r) => r.data);
 
+export const listCapturesV2 = (params) =>
+  api.get('/api/capture/', { params }).then((res) => res.data);
+
+export const listPendingV2 = (params) =>
+  api.get('/api/capture/pending', { params }).then((res) => res.data);
+
 export default api;
