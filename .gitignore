@@ -70,3 +70,5 @@ tunnel.log
 # Python virtual environment
 venv/
 .venv/
+._*
+.DS_Store
