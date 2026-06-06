@@ -179,10 +179,12 @@ CURRENT BUILD INFO (update this section after each release)
 
 Date:           2026-06-06
 Version:        0.1.0
-Tunnel URL:     https://whale-secretary-doors-engineering.trycloudflare.com
-APK (v0.1.0):   https://expo.dev/artifacts/eas/jmEgu3tVz5n4JnPb19KGR2.apk
-EAS Build ID:   94a6f441-dad3-468f-b3d0-ae082dfb5ef3
-EAS Install:    https://expo.dev/accounts/arunprakashm/projects/ekk-mobile/builds/94a6f441-dad3-468f-b3d0-ae082dfb5ef3
-Git commit:     3365594  fix: healthcheck updates + ignore macOS metadata files
+Tunnel URL:     https://solely-deposit-evanescence-jessica.trycloudflare.com
+Web URL:        https://solely-deposit-evanescence-jessica.trycloudflare.com/
+APK Direct DL:  https://solely-deposit-evanescence-jessica.trycloudflare.com/downloads/ekk-idms-v0.1.0.apk
+APK EAS:        https://expo.dev/artifacts/eas/nALg74WAGtFFwqWV7LwgH2.apk
+EAS Build ID:   aeea79fb-9bff-4a23-b916-2889e7d5a9d7
+EAS Install:    https://expo.dev/accounts/arunprakashm/projects/ekk-mobile/builds/aeea79fb-9bff-4a23-b916-2889e7d5a9d7
+Git commit:     9637e01  feat: v0.1.0 preview build
 
 ================================================================================
