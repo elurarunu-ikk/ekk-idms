@@ -1,0 +1,188 @@
+================================================================================
+  EKK IDMS — BUILD CHECKLIST (Web Admin + Mobile APK)
+  Working folder: D:\EKK_INFRA_LTD\EKK_IDMS_Project
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — PRE-BUILD CHECKS (run every time before any build)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Check all containers are running and healthy
+   PROMPT: docker ps
+
+   Expected: All 9 containers Up (healthy) — especially ekk_api, ekk_frontend,
+             ekk_postgres, ekk_redis, ekk_nginx, ekk_celery, ekk_celery_beat
+
+2. Check git status and latest commits
+   PROMPT: git log --oneline -3
+           git status
+
+   Expected: working tree clean, branch up to date with origin/main
+
+3. Check alembic migration state
+   PROMPT: docker exec ekk_api alembic heads
+           docker exec ekk_api alembic current
+
+   Expected: both show the same single (head) hash
+
+4. Verify key table row counts
+   PROMPT:
+     docker exec ekk_postgres psql -U ekk -d ekk_idms -c "
+     SELECT 'level_register' as tbl, COUNT(*) FROM level_register
+     UNION ALL SELECT 'master_activities', COUNT(*) FROM master_activities
+     UNION ALL SELECT 'master_materials', COUNT(*) FROM master_materials
+     UNION ALL SELECT 'projects', COUNT(*) FROM projects
+     UNION ALL SELECT 'site_data_transactions', COUNT(*) FROM site_data_transactions;"
+
+   Expected baseline: level_register ~94050, master_activities 26,
+                      master_materials 21, projects 2
+
+5. Verify API is responding
+   PROMPT: Invoke-WebRequest -Uri "http://localhost/health" -UseBasicParsing
+
+   Expected: {"status":"ok","service":"EKK IDMS API","version":"1.0.0"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — CLOUDFLARE TUNNEL (required for mobile APK build / user testing)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+NOTE: Quick tunnel URL changes every restart. Must start tunnel BEFORE building APK.
+
+1. Check if tunnel is already running
+   PROMPT: Get-Process cloudflared -ErrorAction SilentlyContinue
+
+2. Start tunnel (if not running)
+   PROMPT:
+     Start-Process -FilePath "C:\Program Files (x86)\cloudflared\cloudflared.exe" `
+       -ArgumentList "tunnel --url http://localhost:80" `
+       -RedirectStandardOutput "D:\EKK_INFRA_LTD\EKK_IDMS_Project\cf_tunnel.log" `
+       -RedirectStandardError  "D:\EKK_INFRA_LTD\EKK_IDMS_Project\cf_tunnel_err.log" `
+       -NoNewWindow
+     Start-Sleep -Seconds 10
+     Get-Content "D:\EKK_INFRA_LTD\EKK_IDMS_Project\cf_tunnel_err.log" | Select-String "trycloudflare"
+
+3. Copy the https://xxxx.trycloudflare.com URL from the output
+
+4. Verify tunnel works before updating .env
+   PROMPT: (Invoke-WebRequest -Uri "https://YOUR-TUNNEL-URL/health" -UseBasicParsing).Content
+   Expected: {"status":"ok",...}
+
+5. Also test the root (frontend)
+   PROMPT: (Invoke-WebRequest -Uri "https://YOUR-TUNNEL-URL/" -UseBasicParsing).StatusCode
+   Expected: 200
+
+6. Update mobile .env with new tunnel URL
+   FILE: D:\EKK_INFRA_LTD\EKK_IDMS_Project\ekk-mobile\.env
+   Set:  EXPO_PUBLIC_API_BASE=https://YOUR-TUNNEL-URL
+         #EXPO_PUBLIC_API_BASE=http://192.168.1.242   ← keep commented for dev
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — WEB ADMIN BUILD (ekk-web / ekk_frontend container)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Files to check before build:
+  - ekk-web/src/        (React source)
+  - ekk-idms/.env       (API env vars)
+  - ekk-idms/docker-compose.yml (VITE_API_BASE_URL arg)
+
+Build commands:
+  cd D:\EKK_INFRA_LTD\EKK_IDMS_Project\ekk-idms
+  docker compose stop frontend
+  docker compose build frontend --no-cache
+  docker compose up -d frontend
+
+Verify after build:
+  PROMPT: docker ps --filter name=ekk_frontend
+  Expected: Up (healthy)
+  Browser: http://localhost/ → should load the React app
+
+NOTE: After rebuilding frontend (or api), restart nginx to re-resolve IPs:
+  PROMPT: docker restart ekk_nginx
+  (nginx.conf now has resolver 127.0.0.11 valid=30s — handles this automatically
+   for requests, but a restart is safest after container IP changes)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — MOBILE APK BUILD (ekk-mobile, EAS Cloud Build)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Files to check before build:
+  - ekk-mobile/.env             (EXPO_PUBLIC_API_BASE must be tunnel URL)
+  - ekk-mobile/app.config.js    (version, name, package)
+  - ekk-mobile/eas.json         (build profiles)
+
+Build profiles:
+  development  → dev client APK, app name "ekk-mobile", for developer use
+  preview      → APK for user testing, app name "ekk-Idms", tunnel URL baked in
+  production   → Play Store AAB
+
+Version bump before each release:
+  FILE: ekk-mobile/app.config.js
+  Change: version: '0.1.0'  →  '0.2.0' etc.
+
+Build command (preview APK for user testing):
+  cd D:\EKK_INFRA_LTD\EKK_IDMS_Project\ekk-mobile
+  eas build --profile preview --platform android
+
+After build completes:
+  - EAS prints an install link + QR code
+  - Get direct APK URL:
+    eas build:view <BUILD_ID> --json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const b=JSON.parse(d);console.log(b?.artifacts?.buildUrl||'')})"
+  - Share both the tunnel URL and the APK URL with testers
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — LOCAL DEV (Expo Go on phone, same Wi-Fi)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Ensure .env uses local IP (not tunnel):
+   FILE: ekk-mobile/.env
+   Set:  #EXPO_PUBLIC_API_BASE=https://xxxx.trycloudflare.com  ← comment out
+         EXPO_PUBLIC_API_BASE=http://192.168.1.242              ← uncomment
+
+2. Start Metro bundler with cache cleared:
+   cd D:\EKK_INFRA_LTD\EKK_IDMS_Project\ekk-mobile
+   npx expo start --clear
+
+3. Scan QR in Expo Go app on phone (phone must be on same Wi-Fi as 192.168.1.242)
+
+4. Web version (browser): http://localhost:8081/ or http://localhost/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — KNOWN ISSUES & FIXES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Issue: 502 Bad Gateway on / after rebuilding frontend or api container
+Fix:   docker restart ekk_nginx
+Why:   nginx cached the old container IP. The resolver directive (127.0.0.11)
+       handles this for new connections, but a restart is cleanest after a build.
+
+Issue: Celery containers crash-looping ("module celery_app not found")
+Fix:   cd ekk-idms && docker compose up -d --force-recreate celery_worker celery_beat
+Why:   Containers were created from wrong working directory path.
+
+Issue: Expo Go still connecting to old URL after .env change
+Fix:   Stop Metro, run: npx expo start --clear
+Why:   Expo bakes env vars into the JS bundle at start time, not at file-read time.
+
+Issue: Cloudflare tunnel 502 on root but /health works
+Fix:   docker restart ekk_nginx  (nginx stale upstream IP)
+
+Issue: DB needs restore from backup
+Fix:   docker cp <backup.sql.gz> ekk_postgres:/tmp/backup.sql.gz
+       docker exec ekk_postgres psql -U ekk -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='ekk_idms' AND pid<>pg_backend_pid();"
+       docker exec ekk_postgres psql -U ekk -d postgres -c "DROP DATABASE ekk_idms; CREATE DATABASE ekk_idms OWNER ekk;"
+       docker exec ekk_postgres bash -c "gunzip -c /tmp/backup.sql.gz | grep -v '^\\restrict' | psql -U ekk -d ekk_idms"
+       docker exec ekk_api alembic current   ← verify at head
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CURRENT BUILD INFO (update this section after each release)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Date:           2026-06-06
+Version:        0.1.0
+Tunnel URL:     https://whale-secretary-doors-engineering.trycloudflare.com
+APK (v0.1.0):   https://expo.dev/artifacts/eas/jmEgu3tVz5n4JnPb19KGR2.apk
+EAS Build ID:   94a6f441-dad3-468f-b3d0-ae082dfb5ef3
+EAS Install:    https://expo.dev/accounts/arunprakashm/projects/ekk-mobile/builds/94a6f441-dad3-468f-b3d0-ae082dfb5ef3
+Git commit:     3365594  fix: healthcheck updates + ignore macOS metadata files
+
+================================================================================
