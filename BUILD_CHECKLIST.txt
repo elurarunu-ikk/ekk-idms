@@ -181,10 +181,18 @@ Date:           2026-06-06
 Version:        0.1.0
 Tunnel URL:     https://solely-deposit-evanescence-jessica.trycloudflare.com
 Web URL:        https://solely-deposit-evanescence-jessica.trycloudflare.com/
-APK Direct DL:  https://solely-deposit-evanescence-jessica.trycloudflare.com/downloads/ekk-idms-v0.1.0.apk
-APK EAS:        https://expo.dev/artifacts/eas/nALg74WAGtFFwqWV7LwgH2.apk
+
+APK DOWNLOAD (USE THIS LINK — direct from EAS, URL correctly baked):
+  https://expo.dev/artifacts/eas/nALg74WAGtFFwqWV7LwgH2.apk
+
+EAS Install page (with QR code):
+  https://expo.dev/accounts/arunprakashm/projects/ekk-mobile/builds/aeea79fb-9bff-4a23-b916-2889e7d5a9d7
+
+NOTE: Do NOT use the /downloads/ekk-idms-v0.1.0.apk server link for v0.1.0 —
+      that file has wrong URL baked (pre-fix). From next build onwards, eas.json
+      embeds the URL correctly and the server download link will work.
+
 EAS Build ID:   aeea79fb-9bff-4a23-b916-2889e7d5a9d7
-EAS Install:    https://expo.dev/accounts/arunprakashm/projects/ekk-mobile/builds/aeea79fb-9bff-4a23-b916-2889e7d5a9d7
-Git commit:     9637e01  feat: v0.1.0 preview build
+Git commit:     ee0e9d1  fix: bake tunnel URL into eas.json preview env
 
 ================================================================================
