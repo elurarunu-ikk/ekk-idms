@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform, NativeModules } from 'react-native';
 import Constants from 'expo-constants';
 
-const PUBLIC_API_BASE = 'https://thank-lists-mtv-joel.trycloudflare.com';
+const PUBLIC_API_BASE = 'https://solely-deposit-evanescence-jessica.trycloudflare.com';
 function hostFromUri(raw) {
   if (!raw || typeof raw !== 'string') return '';
   try {
