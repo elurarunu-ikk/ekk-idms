@@ -14,14 +14,15 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, hash_password, verify_token, create_token
 from database import get_db
 from models.user import User
-from models.user_mgmt_models import UserType
+from models.user_mgmt_models import UserType, UserModuleAssignment
+from models.user_session import RegisteredDevice, UserSession
 from schemas.user_schemas import (
     ActivityDashboardResponse, AuditLogResponse, CloneResultResponse,
     ImpersonateRequest, PasswordChangeRequest, PasswordResetRequest,
     UserCreateRequest, UserListResponse, UserResponse, UserSummaryResponse,
     UserUpdateRequest,
 )
-from services.permission_service import get_effective_permissions, write_audit_log
+from services.permission_service import get_effective_permissions, invalidate_user_sessions, write_audit_log
 from services.user_service import (
     activate_user, change_own_password, check_privilege_chain,
     clone_user, create_user, deactivate_user, reset_password,
@@ -175,12 +176,20 @@ def update_user(
 
     old_val = {"full_name": user.full_name, "email": user.email}
     if payload.full_name:    user.full_name    = payload.full_name
-    if payload.email:        user.email        = payload.email
+    if payload.email:
+        new_email = payload.email.lower()
+        if new_email != (user.email or '').lower():
+            conflict = db.query(User).filter(User.email == new_email, User.id != user_id).first()
+            if conflict:
+                raise HTTPException(status_code=409, detail="Email already registered by another user.")
+        user.email = new_email
     if payload.phone:        user.phone        = payload.phone
     if payload.department:   user.department   = payload.department
     if payload.designation:  user.designation  = payload.designation
     if payload.organisation: user.organisation = payload.organisation
     if payload.expires_at:   user.expires_at   = payload.expires_at
+    if payload.user_type:    user.user_type    = payload.user_type
+    if payload.user_kind:    user.user_kind    = payload.user_kind
 
     write_audit_log(db, target_user_id=user_id, changed_by=current_user.id,
                     change_type="updated", table_name="users",
@@ -308,6 +317,45 @@ def end_impersonation(
     return {"success": True, "message": "Impersonation ended. Use your original token."}
 
 
+# ── Module assignments ────────────────────────────────────────────────────────
+
+@router.put("/{user_id}/modules")
+def update_user_modules(
+    user_id: UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Replace all module assignments for a user."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    module_ids = payload.get("module_ids", [])
+
+    db.query(UserModuleAssignment).filter(
+        UserModuleAssignment.user_id == user_id
+    ).delete()
+
+    for module_id in module_ids:
+        db.add(UserModuleAssignment(
+            user_id=user_id,
+            module_id=module_id,
+        ))
+
+    write_audit_log(
+        db,
+        target_user_id=user_id,
+        changed_by=current_user.id,
+        change_type="updated",
+        table_name="user_module_assignments",
+        new_val={"module_ids": module_ids},
+    )
+
+    db.commit()
+    return {"success": True, "module_ids": module_ids}
+
+
 # ── Audit log ─────────────────────────────────────────────────────────────────
 
 @router.get("/{user_id}/audit-log", response_model=AuditLogResponse)
@@ -332,3 +380,64 @@ def get_audit_log(
         total=total,
         entries=[AuditLogEntry.model_validate(e) for e in entries],
     )
+
+
+# ── Session / device admin ────────────────────────────────────────────────────
+
+@router.post("/{user_id}/reset-device")
+def reset_device(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """SUPER ADMIN / ADMIN only. Clears the user's registered mobile device and invalidates their mobile session."""
+    if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    device = db.query(RegisteredDevice).filter(RegisteredDevice.user_id == user_id).first()
+    if device:
+        db.delete(device)
+
+    mobile_session = db.query(UserSession).filter(
+        UserSession.user_id == user_id,
+        UserSession.platform == "mobile",
+    ).first()
+    if mobile_session:
+        invalidate_user_sessions(db, user_id, mobile_session.jti)
+        db.delete(mobile_session)
+
+    write_audit_log(
+        db, target_user_id=user_id, changed_by=current_user.id,
+        change_type="device_reset", table_name="registered_devices",
+    )
+    db.commit()
+    return {"success": True, "message": "Device registration cleared. User must re-register their device on next mobile login."}
+
+
+@router.post("/{user_id}/force-logout")
+def force_logout(
+    user_id: UUID,
+    platform: Optional[str] = Query(None, regex="^(web|mobile)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """SUPER ADMIN / ADMIN only. Force-logs out a user's web and/or mobile session."""
+    if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    query = db.query(UserSession).filter(UserSession.user_id == user_id)
+    if platform:
+        query = query.filter(UserSession.platform == platform)
+
+    sessions = query.all()
+    for session in sessions:
+        invalidate_user_sessions(db, user_id, session.jti)
+        db.delete(session)
+
+    write_audit_log(
+        db, target_user_id=user_id, changed_by=current_user.id,
+        change_type="force_logout", table_name="user_sessions",
+        new_val={"platform": platform or "all"},
+    )
+    db.commit()
+    return {"success": True, "message": f"Force-logged out {len(sessions)} session(s).", "sessions_removed": len(sessions)}

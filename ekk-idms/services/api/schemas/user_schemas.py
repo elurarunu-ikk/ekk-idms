@@ -86,6 +86,8 @@ class UserUpdateRequest(BaseModel):
     designation:  Optional[str] = Field(None, max_length=100)
     organisation: Optional[str] = Field(None, max_length=200)
     expires_at:   Optional[datetime] = None
+    user_type:    Optional[str] = Field(None, max_length=50)
+    user_kind:    Optional[str] = Field(None, max_length=20)
 
 
 class PasswordChangeRequest(BaseModel):

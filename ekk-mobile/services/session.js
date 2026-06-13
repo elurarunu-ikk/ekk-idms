@@ -110,6 +110,11 @@ export async function setSttLang(langCode) {
   await secureSet(STT_LANG_KEY, langCode);
 }
 
+export async function getSessionUser() {
+  const session = await getStoredSession();
+  return session?.user || null;
+}
+
 export async function clearSession() {
   await secureDel(SESSION_KEY);
   await secureDel(SELECTED_PROJECT_KEY);

@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { listPending } from '../services/apiService';
+import { listPending, logoutUser } from '../services/apiService';
 import ChatWidget from './ChatWidget';
 import useProjectSession from '../hooks/useProjectSession';
 import { clearSession } from '../services/session';
@@ -87,7 +87,8 @@ const Navbar = () => {
     if (selectedProjectId) fetchPendingCount();
   }, [selectedProjectId]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logoutUser();
     clearSession();
     navigate('/login');
   };

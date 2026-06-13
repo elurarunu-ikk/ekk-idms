@@ -92,7 +92,7 @@ export default function Step5Review() {
       setNewUser(user);
     } catch (err) {
       const status = err?.response?.status;
-      if (status === 409) { toast.error('Username already taken'); setStep(1); }
+      if (status === 409) { toast.error(getApiErrorMessage(err, 'Username already taken')); setStep(1); }
       else if (status === 403) { toast.error("You don't have permission to create this user type"); }
       else { toast.error(getApiErrorMessage(err, 'Failed to create user')); }
     } finally {

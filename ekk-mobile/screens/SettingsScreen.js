@@ -1,14 +1,14 @@
 // ekk-mobile/screens/SettingsScreen.js
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, Switch,
+  StyleSheet, Alert, ActivityIndicator, Switch, Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useNetworkMode } from '../hooks/useNetworkMode';
 import { logout } from '../services/auth';
-import { getAccessibleProjects, getSelectedProjectId, setSelectedProjectId, getSttLang, setSttLang, STT_LANGUAGES } from '../services/session';
+import { getAccessibleProjects, getSelectedProjectId, setSelectedProjectId, getSttLang, setSttLang, STT_LANGUAGES, getSessionUser } from '../services/session';
 import { loadQueue, removeFromQueue, markFailed } from '../utils/offlineQueue';
 import api, { API_BASE, getApiErrorMessage } from '../services/api';
 
@@ -47,6 +47,7 @@ export default function SettingsScreen() {
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectIdState] = useState('');
   const [sttLang, setSttLangState] = useState('en-IN');
+  const [sessionUser, setSessionUser] = useState(null);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -60,9 +61,11 @@ export default function SettingsScreen() {
     const available = await getAccessibleProjects();
     const selected = await getSelectedProjectId();
     const lang = await getSttLang();
+    const user = await getSessionUser();
     setProjects(available);
     setSelectedProjectIdState(selected);
     setSttLangState(lang);
+    setSessionUser(user);
   }
 
   async function handleSttLangChange(code) {
@@ -162,21 +165,29 @@ export default function SettingsScreen() {
     Alert.alert('Sync complete', `✅ ${ok} entries uploaded${totalMedia > 0 ? ` with ${totalMedia} media files` : ''}${fail > 0 ? `\n❌ ${fail} failed — check errors below` : ''}`);
   }
 
-  function handleLogout() {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out', style: 'destructive',
-          onPress: async () => {
-            await logout();
-            navigation.replace('Login');
+  async function handleLogout() {
+    // Alert.alert action buttons are a no-op on Expo web — use platform-aware confirm
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-alert
+      if (!window.confirm('Are you sure you want to sign out?')) return;
+      await logout();
+      navigation.replace('Login');
+    } else {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to sign out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign Out', style: 'destructive',
+            onPress: async () => {
+              await logout();
+              navigation.replace('Login');
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   }
 
   const pendingCount = queue.filter(i => i.syncStatus !== 'synced').length;
@@ -186,6 +197,21 @@ export default function SettingsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
         <Text style={styles.subtitle}>Connectivity and offline queue</Text>
+        {sessionUser && (
+          <View style={styles.userRow}>
+            <View style={styles.userAvatar}>
+              <Text style={styles.userAvatarText}>
+                {(sessionUser.username || sessionUser.full_name || 'U')[0].toUpperCase()}
+              </Text>
+            </View>
+            <View>
+              <Text style={styles.userName}>
+                {sessionUser.username || sessionUser.email || 'User'}
+              </Text>
+              <Text style={styles.userRole}>{sessionUser.user_type}</Text>
+            </View>
+          </View>
+        )}
       </View>
 
       <Text style={styles.sectionLabel}>Network Mode</Text>
@@ -337,6 +363,11 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#1a1a1a', padding: 20, paddingTop: 52 },
   title: { fontSize: 22, fontWeight: '700', color: '#fff' },
   subtitle: { fontSize: 12, color: '#777', marginTop: 2 },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#333' },
+  userAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' },
+  userAvatarText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  userName: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  userRole: { color: '#9ca3af', fontSize: 11, marginTop: 1 },
   sectionLabel: { fontSize: 11, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginHorizontal: 16, marginTop: 20, marginBottom: 8 },
   card: { backgroundColor: '#fff', borderRadius: 12, marginHorizontal: 16, padding: 14, borderWidth: 1, borderColor: '#e0e0e0' },
   netRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },

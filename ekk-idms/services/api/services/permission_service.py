@@ -96,17 +96,6 @@ def save_form_rights(
     if not target:
         raise HTTPException(status_code=404, detail="Target user not found")
 
-    anomalies = run_anomaly_check(
-        user_type=UserType(target.user_type) if target.user_type in UserType.__members__ else UserType.USER,
-        rights=rights,
-        form_names=form_names or {},
-    )
-    if anomalies.has_errors:
-        raise HTTPException(status_code=400, detail={
-            "message": "Permission anomalies detected",
-            "findings": [f.model_dump() for f in anomalies.findings if f.severity == "error"],
-        })
-
     results = []
     for r in rights:
         existing = db.query(UserFormRight).filter(

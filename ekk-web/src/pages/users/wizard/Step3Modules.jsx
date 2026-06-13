@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart2, Camera, CheckSquare, Compass, FileText,
   Home, Layers, MessageSquare, Settings, Users,
+  Database, Upload, Map,
 } from 'lucide-react';
 import { useWizardStore } from '../../../store/wizardStore';
 import { listModules } from '../../../services/apiService';
@@ -11,7 +12,7 @@ const MODULE_ICONS = {
   dashboard: Home, capture: Camera, entries: FileText,
   approvals: CheckSquare, report: BarChart2, chat: MessageSquare,
   projects: Compass, users: Users, companies: Layers,
-  resources: Settings,
+  resources: Settings, masters: Database, gradesheet: Upload, refdata: Map,
 };
 
 const AUTO_MODULE_TYPES = ['SUPER_ADMIN', 'SUPER ADMIN', 'SITE_ADMIN'];
@@ -27,7 +28,10 @@ const FALLBACK_MODULES = [
   { id: 'projects', name: 'Projects', description: 'Project management', form_count: 2 },
   { id: 'users', name: 'User Management', description: 'Manage users and access', form_count: 4 },
   { id: 'companies', name: 'Companies', description: 'Company master data', form_count: 1 },
-  { id: 'resources', name: 'Resources', description: '3M resource masters', form_count: 3 },
+  { id: 'resources',  name: 'Resources',       description: '3M resource masters',         form_count: 3 },
+  { id: 'masters',    name: 'Masters',         description: 'Work types, layers, activities', form_count: 1 },
+  { id: 'gradesheet', name: 'Grade Sheet',     description: 'Level register import',          form_count: 1 },
+  { id: 'refdata',    name: 'Reference Data',  description: 'OGL and reference data',         form_count: 1 },
 ];
 
 export default function Step3Modules() {

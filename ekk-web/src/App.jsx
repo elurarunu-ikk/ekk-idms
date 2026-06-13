@@ -52,6 +52,7 @@ const App = () => {
         <Route path="projects" element={<ProjectMaster />} />
         <Route path="users" element={<UserManagement />} />
         <Route path="users/new" element={<CreateUser />} />
+        <Route path="users/:id/access" element={<CreateUser />} />
         <Route path="users/:id" element={<UserDetail />} />
         <Route path="grade-sheet" element={<GradeSheetImport />} />
         <Route path="reference-data" element={<ReferenceDataPage />} />

@@ -71,6 +71,9 @@ api.interceptors.response.use(
 export const loginUser = (email, password) =>
   api.post('/auth/login', { email, password }).then((res) => res.data);
 
+export const logoutUser = () =>
+  api.post('/auth/logout').catch(() => {});
+
 export const getSession = () => api.get('/auth/me').then((res) => res.data);
 
 export const changePassword = (payload) => api.post('/auth/change-password', payload).then((res) => res.data);
@@ -325,11 +328,11 @@ export const validatePermissions = (payload) =>
 export const getRoleSuggestion = (designation, department) =>
   api.get('/api/v1/hr/role-suggest', { params: { designation, department } }).then((r) => r.data);
 
-export const saveFormRights = (userId, formRights) =>
-  api.post(`/api/v1/permissions/form-rights/${userId}`, { user_type: '', form_rights: formRights }).then((r) => r.data);
+export const saveFormRights = (userId, formRights, userType = 'USER') =>
+  api.post(`/api/v1/permissions/form-rights/${userId}`, { user_type: userType, form_rights: formRights }).then((r) => r.data);
 
 export const listSites = (params) =>
-  api.get('/api/v1/sites/', { params }).then((r) => r.data);
+  api.get('/api/projects/', { params }).then((r) => r.data);
 
 export const listModules = () =>
   api.get('/api/v1/modules/').then((r) => r.data);
@@ -357,5 +360,48 @@ export const listCapturesV2 = (params) =>
 
 export const listPendingV2 = (params) =>
   api.get('/api/capture/pending', { params }).then((res) => res.data);
+
+/**
+ * Get capture counts and total LM grouped by work_type and layer_code.
+ * Used by dashboard to show capture progress per layer.
+ */
+export const getCapturesByLayer = async (projectId) => {
+  const res = await listCaptures({
+    project_id: projectId,
+    skip: 0,
+    limit: 500,
+  });
+
+  const entries = res.entries || [];
+
+  const grouped = {};
+  for (const entry of entries) {
+    const key = `${entry.work_type || 'UNKNOWN'}__${entry.layer_code || '—'}`;
+    if (!grouped[key]) {
+      grouped[key] = {
+        work_type: entry.work_type || 'UNKNOWN',
+        layer_code: entry.layer_code || '—',
+        total: 0,
+        approved: 0,
+        pending: 0,
+        rejected: 0,
+        total_lm: 0,
+      };
+    }
+    grouped[key].total += 1;
+    grouped[key].total_lm += parseFloat(entry.quantity_lm || 0);
+    if (entry.approved) grouped[key].approved += 1;
+    else if (entry.rejected) grouped[key].rejected += 1;
+    else grouped[key].pending += 1;
+  }
+
+  return Object.values(grouped).sort((a, b) => b.total - a.total);
+};
+
+export const getUserPermissions = (userId) =>
+  api.get(`/api/v1/permissions/summary/${userId}`).then(r => r.data);
+
+export const updateUserModules = (userId, moduleIds) =>
+  api.put(`/api/v1/users/${userId}/modules`, { module_ids: moduleIds }).then(r => r.data);
 
 export default api;

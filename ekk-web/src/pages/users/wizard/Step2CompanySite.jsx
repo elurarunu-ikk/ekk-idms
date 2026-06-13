@@ -52,7 +52,7 @@ export default function Step2CompanySite() {
   function selectAll() { setSelectedSiteIds(sites.map((s) => s.id)); }
   function clearAll()  { setSelectedSiteIds([]); }
 
-  const selectedSiteNames = sites.filter((s) => selectedSiteIds.includes(s.id)).map((s) => s.name || s.id);
+  const selectedSiteNames = sites.filter((s) => selectedSiteIds.includes(s.id)).map((s) => s.project_code ? `${s.project_code} · ${s.name}` : s.name || s.id);
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -87,7 +87,7 @@ export default function Step2CompanySite() {
                   <label key={site.id} className="flex cursor-pointer items-center gap-2">
                     <input type="checkbox" checked={selectedSiteIds.includes(site.id)}
                       onChange={() => toggleSite(site.id)} className="rounded text-primary-600" />
-                    <span className="text-sm text-gray-700">{site.name || site.id}</span>
+                    <span className="text-sm text-gray-700">{site.project_code ? `${site.project_code} · ${site.name}` : site.name || site.id}</span>
                   </label>
                 ))}
               </div>
@@ -116,7 +116,7 @@ export default function Step2CompanySite() {
             {selectedSiteNames.map((name, i) => (
               <span key={i} className="flex items-center gap-1 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-700">
                 {name}
-                <button type="button" onClick={() => toggleSite(sites.find((s) => (s.name || s.id) === name)?.id)}>
+                <button type="button" onClick={() => toggleSite(sites.find((s) => (s.project_code ? `${s.project_code} · ${s.name}` : s.name || s.id) === name)?.id)}>
                   <X className="h-3 w-3" />
                 </button>
               </span>

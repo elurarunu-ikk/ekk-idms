@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import {
   Search, Plus, Upload, Download, MoreVertical,
-  UserCheck, UserX, Copy, Key, Clock, Eye,
+  UserCheck, UserX, Copy, Key, Clock, Eye, Pencil, X, Shield,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useUserList, useDeactivateUser, useActivateUser } from '../hooks/useUsers';
-import { exportUsers, getApiErrorMessage } from '../services/apiService';
+import { exportUsers, getApiErrorMessage, updateUserV2, getUserById } from '../services/apiService';
 import { ROLE_LABELS, ROLE_STYLES, ROLE_DOT, CAN_CREATE } from '../constants/userConstants';
 import RoleBadge from '../components/users/RoleBadge';
 import UserAvatar from '../components/users/UserAvatar';
@@ -19,6 +19,34 @@ import BulkImportDialog from './users/panels/BulkImportDialog';
 import CloneUserDialog from './users/panels/CloneUserDialog';
 import ResetPasswordDialog from './users/panels/ResetPasswordDialog';
 import TempAccessDialog from './users/panels/TempAccessDialog';
+
+const ALL_MODULES = [
+  { id: 'dashboard',  label: 'Dashboard' },
+  { id: 'capture',    label: 'Captures' },
+  { id: 'entries',    label: 'Entries' },
+  { id: 'approvals',  label: 'Pending Approvals' },
+  { id: 'report',     label: 'Reports' },
+  { id: 'chat',       label: 'AI Assistant' },
+  { id: 'projects',   label: 'Projects' },
+  { id: 'users',      label: 'User Management' },
+  { id: 'companies',  label: 'Companies' },
+  { id: 'resources',  label: '3M Resources' },
+  { id: 'masters',    label: 'Masters' },
+  { id: 'gradesheet', label: 'Grade Sheet' },
+  { id: 'refdata',    label: 'Reference Data' },
+];
+
+const ALL_FORM_RIGHTS = [
+  { id: 'companies.view',  label: 'Companies',       module: 'companies' },
+  { id: 'resources.view',  label: '3M Resources',    module: 'resources' },
+  { id: 'user_mgmt.view',      label: 'User Management',  module: 'users' },
+  { id: 'projects.view',       label: 'Projects',         module: 'projects' },
+  { id: 'capture.create',      label: 'Submit Capture',   module: 'capture' },
+  { id: 'capture.edit',        label: 'Edit Capture',     module: 'capture' },
+  { id: 'approvals.approve',   label: 'Approve Entries',  module: 'approvals' },
+  { id: 'report.view',         label: 'View Reports',     module: 'report' },
+  { id: 'report.export',       label: 'Export Reports',   module: 'report' },
+];
 
 const MenuItem = ({ icon, label, onClick, className = '' }) => (
   <button
@@ -32,7 +60,7 @@ const MenuItem = ({ icon, label, onClick, className = '' }) => (
 
 const UserTableRow = ({
   user, currentUserType, openMenuId, setOpenMenuId,
-  onView, onReset, onClone, onTempAccess, onDeactivate, onActivate,
+  onView, onEdit, onManageAccess, onReset, onClone, onTempAccess, onDeactivate, onActivate,
 }) => {
   const menuOpen = openMenuId === user.id;
 
@@ -86,6 +114,8 @@ const UserTableRow = ({
             <MenuItem icon={<Eye className="w-4 h-4" />} label="View profile" onClick={onView} />
             <MenuItem icon={<Key className="w-4 h-4" />} label="Reset password" onClick={onReset} />
             <MenuItem icon={<Copy className="w-4 h-4" />} label="Clone user" onClick={onClone} />
+            <MenuItem icon={<Pencil className="w-4 h-4" />} label="Edit details" onClick={onEdit} />
+            <MenuItem icon={<Shield className="w-4 h-4" />} label="Manage access" onClick={onManageAccess} />
             <MenuItem icon={<Clock className="w-4 h-4" />} label="Temp access" onClick={onTempAccess} />
             <div className="my-1 border-t border-gray-100" />
             {user.is_active
@@ -152,6 +182,11 @@ const UserManagement = () => {
   const [tempAccessTarget, setTempAccessTarget] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -165,7 +200,7 @@ const UserManagement = () => {
     is_active: showInactive ? undefined : true,
   };
 
-  const { data, isLoading, isError } = useUserList(filters);
+  const { data, isLoading, isError, refetch } = useUserList(filters);
   const users = data?.items || data || [];
   const total = data?.total || users.length;
 
@@ -217,6 +252,29 @@ const UserManagement = () => {
       URL.revokeObjectURL(url);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Export failed'));
+    }
+  };
+
+  const handleEditOpen = async (user) => {
+    setOpenMenuId(null);
+    setEditLoading(true);
+    setEditUser(user);
+    try {
+      const full = await getUserById(user.id);
+      setEditForm({
+        full_name:    full.full_name    || '',
+        email:        full.email        || '',
+        phone:        full.phone        || '',
+        department:   full.department   || '',
+        designation:  full.designation  || '',
+        organisation: full.organisation || '',
+        user_type:    full.user_type    || 'USER',
+      });
+    } catch {
+      toast.error('Failed to load user details');
+      setEditUser(null);
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -374,6 +432,11 @@ const UserManagement = () => {
                       openMenuId={openMenuId}
                       setOpenMenuId={setOpenMenuId}
                       onView={() => navigate(`/users/${user.id}`)}
+                      onEdit={() => handleEditOpen(user)}
+                      onManageAccess={() => {
+                        setOpenMenuId(null);
+                        navigate(`/users/${user.id}/access`);
+                      }}
                       onReset={() => setResetTarget(user)}
                       onClone={() => setCloneTarget(user)}
                       onTempAccess={() => setTempAccessTarget(user)}
@@ -439,6 +502,109 @@ const UserManagement = () => {
           onClose={() => setTempAccessTarget(null)}
         />
       )}
+      {editUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Edit User</h3>
+              <button onClick={() => setEditUser(null)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="mb-4 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+              <span className="text-xs text-gray-500">Account type:</span>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                editUser?.user_kind === 'internal'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {editUser?.user_kind === 'internal' ? 'Internal' : 'External'}
+              </span>
+              <span className="text-xs text-gray-400 ml-1">· Cannot be changed after creation</span>
+            </div>
+            {editLoading && (
+              <div className="flex items-center justify-center py-10 text-sm text-gray-400">
+                Loading user details…
+              </div>
+            )}
+            {!editLoading && (
+              <div className="space-y-4">
+                {[
+                  { key: 'full_name',    label: 'Full Name *',  type: 'text'  },
+                  { key: 'email',        label: 'Email *',      type: 'email' },
+                  { key: 'phone',        label: 'Phone',        type: 'tel'   },
+                  { key: 'department',   label: 'Department',   type: 'text'  },
+                  { key: 'designation',  label: 'Designation',  type: 'text'  },
+                  { key: 'organisation', label: 'Organisation', type: 'text'  },
+                ].map(({ key, label, type }) => (
+                  <div key={key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                    <input
+                      type={type}
+                      value={editForm[key] ?? ''}
+                      onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+                                 focus:border-primary-500 focus:outline-none focus:ring-1
+                                 focus:ring-primary-500"
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">User Type</label>
+                  <select
+                    value={editForm.user_type ?? 'USER'}
+                    onChange={e => setEditForm(f => ({ ...f, user_type: e.target.value }))}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+                               focus:border-primary-500 focus:outline-none focus:ring-1
+                               focus:ring-primary-500"
+                  >
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="HO_USER">HO User</option>
+                    <option value="SITE_ADMIN">Site Admin</option>
+                    <option value="USER">User</option>
+                  </select>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setEditUser(null)}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium
+                           text-gray-700 hover:bg-gray-200 transition">
+                Cancel
+              </button>
+              <button
+                disabled={editSaving || !editForm.full_name || !editForm.email}
+                onClick={async () => {
+                  if (editForm.user_type !== editUser.user_type) {
+                    const confirmed = window.confirm(
+                      `Change role from ${editUser.user_type} to ${editForm.user_type}?\n\nThis will reset their module rights to new role defaults. They will need to log in again.`
+                    );
+                    if (!confirmed) return;
+                  }
+                  setEditSaving(true);
+                  try {
+                    await updateUserV2(editUser.id, editForm);
+                    toast.success('User updated successfully');
+                    setEditUser(null);
+                    refetch();
+                  } catch (err) {
+                    toast.error(getApiErrorMessage(err, 'Failed to update user'));
+                  } finally {
+                    setEditSaving(false);
+                  }
+                }}
+                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium
+                           text-white hover:bg-primary-700 transition
+                           disabled:opacity-50 disabled:cursor-not-allowed">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -11,7 +11,7 @@ const AUTO_FULL_TYPES = ['SUPER_ADMIN', 'SUPER ADMIN', 'SITE_ADMIN'];
 function getFallbackForms(moduleId) {
   const map = {
     capture:   [{ id: 'capture.create', name: 'Create Entry' }, { id: 'capture.edit', name: 'Edit Entry' }],
-    approvals: [{ id: 'approvals.approve', name: 'Approve Entry' }],
+    approvals: [{ id: 'approvals.approve', name: 'Approve/Reject Entries', hasApprove: true }],
     users:     [{ id: 'user_mgmt.create', name: 'Create User' }, { id: 'user_mgmt.view', name: 'View Users' }, { id: 'user_mgmt.edit', name: 'Edit User' }],
     report:    [{ id: 'report.view', name: 'View Reports' }, { id: 'report.export', name: 'Export Reports' }],
   };
@@ -114,6 +114,7 @@ export default function Step4FormRights() {
                     <th className="py-2 text-left">Form</th>
                     <th className="px-1">C</th><th className="px-1">R</th>
                     <th className="px-1">U</th><th className="px-1">D</th>
+                    {mod.forms.some(f => f.hasApprove) && <th className="px-1 text-green-600">A</th>}
                     <th className="px-1 w-6" />
                   </tr>
                 </thead>
@@ -121,9 +122,10 @@ export default function Step4FormRights() {
                   {mod.forms.map((f) => (
                     <CrudToggle key={f.id}
                       formId={f.id} formName={f.name}
-                      value={rights[f.id] || { can_create: false, can_read: false, can_update: false, can_delete: false }}
+                      value={rights[f.id] || { can_create: false, can_read: false, can_update: false, can_delete: false, can_approve: false }}
                       onChange={handleChange}
                       anomaly={findingMap[f.id] || null}
+                      showApprove={!!f.hasApprove}
                     />
                   ))}
                 </tbody>

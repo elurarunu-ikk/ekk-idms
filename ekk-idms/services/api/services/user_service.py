@@ -15,6 +15,7 @@ from models.user_mgmt_models import (
     UserCompanyAssignment, UserModuleAssignment,
     UserSiteAssignment, UserType,
 )
+from models.user_session import UserSession
 from schemas.user_schemas import (
     AnomalyCheckResponse, CloneResultResponse, UserCreateRequest,
     UserResponse,
@@ -86,8 +87,17 @@ def create_user(db: Session, payload: UserCreateRequest, creator: User) -> UserR
         payload.company_assignments[0].site_ids if payload.company_assignments else [],
     )
 
-    if db.query(User).filter(User.username == payload.username).first():
+    existing_user = db.query(User).filter(User.username == payload.username).first()
+    if existing_user:
+        if not existing_user.is_active:
+            raise HTTPException(
+                status_code=409,
+                detail="Username already exists (belongs to a deactivated user). Re-activate that user or choose a different username.",
+            )
         raise HTTPException(status_code=409, detail="Username already exists")
+
+    if db.query(User).filter(User.email == payload.email.lower()).first():
+        raise HTTPException(status_code=409, detail="Email already registered. Use a different email address.")
 
     validate_password_policy(payload.temp_password)
 
@@ -226,6 +236,11 @@ def clone_user(db: Session, payload, cloner: User) -> CloneResultResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _delete_user_sessions(db: Session, user_id: UUID) -> None:
+    """Delete all UserSession rows for a user so they don't hit 409 on next login."""
+    db.query(UserSession).filter(UserSession.user_id == user_id).delete()
+
+
 def deactivate_user(db: Session, user_id: UUID, actor: User, token_jti: Optional[str] = None) -> None:
     """Soft deactivate. Invalidate sessions. Write audit log."""
     user = db.query(User).filter(User.id == user_id).first()
@@ -235,6 +250,7 @@ def deactivate_user(db: Session, user_id: UUID, actor: User, token_jti: Optional
         raise HTTPException(status_code=403, detail="SUPER_ADMIN cannot be deactivated")
     user.is_active = False
     invalidate_user_sessions(db, user_id, token_jti)
+    _delete_user_sessions(db, user_id)
     write_audit_log(db, target_user_id=user_id, changed_by=actor.id,
                     change_type="deactivated", table_name="users")
     db.commit()
@@ -263,6 +279,7 @@ def reset_password(
     user.password_hash   = hash_password(new_password)
     user.must_change_pwd = True
     invalidate_user_sessions(db, user_id, token_jti)
+    _delete_user_sessions(db, user_id)
     write_audit_log(db, target_user_id=user_id, changed_by=actor.id,
                     change_type="password_reset", table_name="users")
     db.commit()
@@ -280,6 +297,7 @@ def change_own_password(
     user.password_hash    = hash_password(new_password)
     user.must_change_pwd  = False
     invalidate_user_sessions(db, user.id, token_jti)
+    _delete_user_sessions(db, user.id)
     write_audit_log(db, target_user_id=user.id, changed_by=user.id,
                     change_type="password_reset", table_name="users")
     db.commit()
