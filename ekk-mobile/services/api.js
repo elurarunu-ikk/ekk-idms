@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform, NativeModules } from 'react-native';
 import Constants from 'expo-constants';
+import { navigateTo } from './navigationRef';
 
 const PUBLIC_API_BASE = 'https://solely-deposit-evanescence-jessica.trycloudflare.com';
 function hostFromUri(raw) {
@@ -128,5 +129,23 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// Redirect to Login when the server revokes or supersedes the session
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const detail = error?.response?.data?.detail || '';
+    if (
+      error?.response?.status === 401 &&
+      (detail === 'session_superseded' || detail === 'session_revoked')
+    ) {
+      // Clear local credentials so LoginScreen starts fresh
+      try { await SecureStore.deleteItemAsync('ekk_token'); } catch (_) {}
+      try { localStorage.removeItem('ekk_token'); } catch (_) {}
+      navigateTo('Login');
+    }
+    return Promise.reject(error);
+  },
+);
 
 export default api;

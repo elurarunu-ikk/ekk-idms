@@ -6,7 +6,8 @@ import LoginScreen from './screens/LoginScreen';
 import CaptureScreen from './screens/CaptureScreen';
 import EntriesScreen from './screens/EntriesScreen';
 import ApprovalScreen from './screens/ApprovalScreen';
-import SettingsScreen from './screens/SettingsScreen'; 
+import SettingsScreen from './screens/SettingsScreen';
+import { navigationRef } from './services/navigationRef';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -40,7 +41,7 @@ function TabNavigator() {
 
 export default function App() {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Main" component={TabNavigator} />
