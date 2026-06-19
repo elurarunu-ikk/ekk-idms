@@ -3,10 +3,13 @@ User Management Router — all user CRUD, password, clone, impersonation endpoin
 Follows the capture_router.py pattern exactly.
 """
 from __future__ import annotations
+import json
 import os
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
+
+from pydantic import BaseModel
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -14,7 +17,9 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, hash_password, verify_token, create_token
 from database import get_db
 from models.user import User
-from models.user_mgmt_models import UserType, UserModuleAssignment
+from models.user_mgmt_models import UserType, UserModuleAssignment, UserSiteAssignment, UserCompanyAssignment
+from models.user_project_access import UserProjectAccess
+from models.project import Project
 from models.user_session import RegisteredDevice, UserSession
 from schemas.user_schemas import (
     ActivityDashboardResponse, AuditLogResponse, CloneResultResponse,
@@ -382,7 +387,151 @@ def get_audit_log(
     )
 
 
+# ── Site assignments ──────────────────────────────────────────────────────────
+
+@router.get("/{user_id}/sites")
+def get_user_sites(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return assigned sites (with names) for a user. ADMIN / SUPER_ADMIN only."""
+    if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_type = user.user_type or ""
+    if user_type in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN", "HO_USER"):
+        return {"is_all_sites": True, "sites": []}
+
+    site_rows = db.query(UserProjectAccess).filter(
+        UserProjectAccess.user_id == user_id,
+        UserProjectAccess.is_active == True,
+    ).all()
+    site_ids = [r.project_id for r in site_rows]
+
+    projects = db.query(Project).filter(Project.id.in_(site_ids)).all() if site_ids else []
+    project_map = {p.id: p for p in projects}
+
+    return {
+        "is_all_sites": False,
+        "sites": [
+            {
+                "id": str(sid),
+                "name": project_map[sid].name if sid in project_map else str(sid),
+                "project_code": project_map[sid].project_code if sid in project_map else None,
+                "company_id": str(project_map[sid].company_id) if sid in project_map and project_map[sid].company_id else None,
+            }
+            for sid in site_ids
+        ],
+    }
+
+
+@router.put("/{user_id}/sites")
+def update_user_sites(
+    user_id: UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Replace all site assignments for a user. ADMIN / SUPER_ADMIN only."""
+    if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    site_ids   = [UUID(s) for s in payload.get("site_ids", [])]
+    company_id = payload.get("company_id")
+
+    # Soft-update UserProjectAccess: deactivate removed sites, reactivate
+    # returning ones, and create rows for brand-new additions.
+    existing_rows = db.query(UserProjectAccess).filter(
+        UserProjectAccess.user_id == user_id
+    ).all()
+    for row in existing_rows:
+        if row.project_id not in site_ids:
+            row.is_active = False
+        elif not row.is_active:
+            row.is_active = True
+
+    existing_project_ids = {row.project_id for row in existing_rows}
+    for sid in site_ids:
+        if sid not in existing_project_ids:
+            db.add(UserProjectAccess(
+                user_id=user_id, project_id=sid,
+                is_active=True, permissions_json={}
+            ))
+
+    if company_id:
+        existing = db.query(UserCompanyAssignment).filter(
+            UserCompanyAssignment.user_id == user_id
+        ).first()
+        if existing:
+            existing.company_id   = UUID(company_id)
+            existing.is_all_sites = False
+        else:
+            db.add(UserCompanyAssignment(
+                user_id=user_id, company_id=UUID(company_id), is_all_sites=False
+            ))
+
+    write_audit_log(
+        db, target_user_id=user_id, changed_by=current_user.id,
+        change_type="updated", table_name="user_project_access",
+        new_val={"site_ids": [str(s) for s in site_ids]},
+    )
+    db.commit()
+    return {"success": True, "site_ids": [str(s) for s in site_ids]}
+
+
 # ── Session / device admin ────────────────────────────────────────────────────
+
+@router.get("/{user_id}/device-sessions")
+def get_device_sessions(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """SUPER ADMIN / ADMIN only. Returns current session and registered device info for a user."""
+    if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    now = datetime.utcnow()
+
+    web_session = db.query(UserSession).filter(
+        UserSession.user_id == user_id, UserSession.platform == "web"
+    ).first()
+
+    mobile_session = db.query(UserSession).filter(
+        UserSession.user_id == user_id, UserSession.platform == "mobile"
+    ).first()
+
+    registered_device = db.query(RegisteredDevice).filter(
+        RegisteredDevice.user_id == user_id
+    ).first()
+
+    def session_dict(s):
+        if not s:
+            return None
+        return {
+            "last_seen_at": s.last_seen_at.isoformat() if s.last_seen_at else None,
+            "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+            "is_active": s.expires_at is None or s.expires_at > now,
+            "device_label": s.device_label,
+            "device_id_hint": s.device_id[-8:] if s.device_id else None,
+        }
+
+    return {
+        "web": session_dict(web_session),
+        "mobile": session_dict(mobile_session),
+        "registered_device": {
+            "device_label": registered_device.device_label,
+            "device_id_hint": registered_device.device_id[-8:] if registered_device.device_id else None,
+            "registered_at": registered_device.registered_at.isoformat() if registered_device.registered_at else None,
+            "is_active": registered_device.is_active,
+        } if registered_device else None,
+    }
+
 
 @router.post("/{user_id}/reset-device")
 def reset_device(
@@ -393,6 +542,8 @@ def reset_device(
     """SUPER ADMIN / ADMIN only. Clears the user's registered mobile device and invalidates their mobile session."""
     if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot reset your own device registration.")
 
     device = db.query(RegisteredDevice).filter(RegisteredDevice.user_id == user_id).first()
     if device:
@@ -424,6 +575,8 @@ def force_logout(
     """SUPER ADMIN / ADMIN only. Force-logs out a user's web and/or mobile session."""
     if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot force-logout your own session. Use the regular logout instead.")
 
     query = db.query(UserSession).filter(UserSession.user_id == user_id)
     if platform:
@@ -441,3 +594,99 @@ def force_logout(
     )
     db.commit()
     return {"success": True, "message": f"Force-logged out {len(sessions)} session(s).", "sessions_removed": len(sessions)}
+
+
+# ── Project access (wizard v2) ────────────────────────────────────────────────
+
+class _ProjectAccessItem(BaseModel):
+    project_id: UUID
+    permissions_json: dict
+
+
+@router.post("/{user_id}/project-access")
+def upsert_project_access(
+    user_id: UUID,
+    payload: List[_ProjectAccessItem],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upsert UserProjectAccess rows for all submitted projects, and
+    deactivate any existing active row whose project_id was omitted from
+    the payload (the wizard always submits the complete intended state).
+    Called immediately after user creation and on edit-mode save.
+    """
+    caller_type = current_user.user_type or ""
+    if caller_type not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    submitted_project_ids = {item.project_id for item in payload}
+
+    for item in payload:
+        existing = (
+            db.query(UserProjectAccess)
+            .filter(
+                UserProjectAccess.user_id == user_id,
+                UserProjectAccess.project_id == item.project_id,
+            )
+            .first()
+        )
+        if existing:
+            existing.permissions_json = json.dumps(item.permissions_json)
+            existing.is_active = True
+        else:
+            db.add(UserProjectAccess(
+                user_id=user_id,
+                project_id=item.project_id,
+                permissions_json=json.dumps(item.permissions_json),
+                is_active=True,
+            ))
+
+    # Deactivate any active row whose project was omitted from this submission.
+    omitted_rows = (
+        db.query(UserProjectAccess)
+        .filter(
+            UserProjectAccess.user_id == user_id,
+            UserProjectAccess.is_active == True,
+            ~UserProjectAccess.project_id.in_(submitted_project_ids),
+        )
+        .all()
+    )
+    for row in omitted_rows:
+        row.is_active = False
+
+    write_audit_log(
+        db, target_user_id=user_id, changed_by=current_user.id,
+        change_type="permission_granted", table_name="user_project_access",
+        new_val={
+            "projects_upserted": len(payload),
+            "projects_deactivated": len(omitted_rows),
+        },
+    )
+    db.commit()
+    return {"upserted": len(payload), "deactivated": len(omitted_rows)}
+
+
+@router.get("/{user_id}/project-access")
+def get_project_access(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    _: dict = Depends(verify_token),
+):
+    """Return all UserProjectAccess rows for a user (used by wizard edit mode)."""
+    rows = (
+        db.query(UserProjectAccess, Project)
+        .join(Project, Project.id == UserProjectAccess.project_id)
+        .filter(UserProjectAccess.user_id == user_id)
+        .all()
+    )
+    return [
+        {
+            "project_id": str(upa.project_id),
+            "project_code": proj.project_code,
+            "project_name": proj.name,
+            "permissions_json": json.loads(upa.permissions_json or "{}"),
+            "is_active": upa.is_active,
+        }
+        for upa, proj in rows
+    ]

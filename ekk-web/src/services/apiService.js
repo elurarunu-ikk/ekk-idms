@@ -355,6 +355,32 @@ export const endImpersonation = () =>
 export const downloadBulkImportTemplate = () =>
   api.get('/api/v1/users/import-template', { responseType: 'blob' }).then((r) => r.data);
 
+export const getUserSites = (id) =>
+  api.get(`/api/v1/users/${id}/sites`).then((r) => r.data);
+
+export const updateUserSites = (id, payload) =>
+  api.put(`/api/v1/users/${id}/sites`, payload).then((r) => r.data);
+
+export const getUserDeviceSessions = (id) =>
+  api.get(`/api/v1/users/${id}/device-sessions`).then((r) => r.data);
+
+export const resetUserDevice = (id) =>
+  api.post(`/api/v1/users/${id}/reset-device`).then((r) => r.data);
+
+export const forceLogoutUser = (id, platform = null) =>
+  api.post(`/api/v1/users/${id}/force-logout`, null, {
+    params: platform ? { platform } : {},
+  }).then((r) => r.data);
+
+export const upsertUserProjectAccess = (userId, rows) =>
+  api.post(`/api/v1/users/${userId}/project-access`, rows).then((r) => r.data);
+
+export const getUserProjectAccess = (userId) =>
+  api.get(`/api/v1/users/${userId}/project-access`).then((r) => r.data);
+
+export const listActiveProjects = () =>
+  api.get('/api/projects/').then((r) => r.data);
+
 export const listCapturesV2 = (params) =>
   api.get('/api/capture/', { params }).then((res) => res.data);
 

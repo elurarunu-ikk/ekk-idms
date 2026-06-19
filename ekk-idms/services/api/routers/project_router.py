@@ -43,6 +43,7 @@ def list_projects(
     site_type: str | None = Query(None),
     department_type: str | None = Query(None),
     include_inactive: bool = Query(False),
+    company_id: str | None = Query(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -57,6 +58,8 @@ def list_projects(
             query = query.filter(Project.site_type == site_type)
         if department_type:
             query = query.filter(Project.department_type == department_type)
+        if company_id:
+            query = query.filter(Project.company_id == uuid.UUID(company_id))
         return [_to_response(project, company_name) for project, company_name in query.order_by(Project.name.asc()).all()]
 
     accessible = get_accessible_projects_for_user(db, user)
@@ -69,6 +72,8 @@ def list_projects(
         if department_type and project.department_type != department_type:
             continue
         if not include_inactive and not project.is_active:
+            continue
+        if company_id and str(project.company_id) != company_id:
             continue
         company_name = db.query(Company.name).filter(Company.id == project.company_id).scalar()
         projects.append(_to_response(project, company_name))

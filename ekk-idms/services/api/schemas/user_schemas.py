@@ -194,13 +194,14 @@ class FormRightResponse(_Base):
 
 
 class PermissionSummaryResponse(BaseModel):
-    user_id:      UUID
-    user_type:    str
-    is_super:     bool = False
-    company_ids:  List[UUID] = []
-    site_ids:     List[UUID] = []
-    module_ids:   List[str] = []
-    form_rights:  List[FormRightResponse] = []
+    user_id:                UUID
+    user_type:              str
+    is_super:               bool = False
+    company_ids:            List[UUID] = []
+    site_ids:               List[UUID] = []
+    module_ids:             List[str] = []
+    form_rights:            List[FormRightResponse] = []
+    sites_with_permissions: List[dict] = []
 
 
 class AssignmentResponse(BaseModel):

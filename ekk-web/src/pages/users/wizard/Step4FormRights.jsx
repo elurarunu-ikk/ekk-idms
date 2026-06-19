@@ -122,10 +122,9 @@ export default function Step4FormRights() {
                   {mod.forms.map((f) => (
                     <CrudToggle key={f.id}
                       formId={f.id} formName={f.name}
-                      value={rights[f.id] || { can_create: false, can_read: false, can_update: false, can_delete: false, can_approve: false }}
+                      value={rights[f.id] || { can_create: false, can_read: false, can_update: false, can_delete: false }}
                       onChange={handleChange}
                       anomaly={findingMap[f.id] || null}
-                      showApprove={!!f.hasApprove}
                     />
                   ))}
                 </tbody>

@@ -3,9 +3,14 @@ import toast from 'react-hot-toast';
 import {
   activateUser,
   deactivateUser,
+  forceLogoutUser,
   getUserActivity,
   getUserById,
+  getUserDeviceSessions,
+  getUserSites,
   listUsersV2,
+  resetUserDevice,
+  updateUserSites,
 } from '../services/apiService';
 
 export const useUserList = (filters) =>
@@ -50,5 +55,57 @@ export const useActivateUser = () => {
       toast.success('User activated');
     },
     onError: (err) => toast.error(err?.response?.data?.detail || 'Failed to activate'),
+  });
+};
+
+export const useUserSites = (id) =>
+  useQuery({
+    queryKey: ['user-sites', id],
+    queryFn: () => getUserSites(id),
+    enabled: !!id,
+    refetchOnWindowFocus: false,
+  });
+
+export const useUpdateUserSites = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }) => updateUserSites(id, payload),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['user-sites', id] });
+      toast.success('Site assignments updated');
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Failed to update sites'),
+  });
+};
+
+export const useUserDeviceSessions = (id) =>
+  useQuery({
+    queryKey: ['user-device-sessions', id],
+    queryFn: () => getUserDeviceSessions(id),
+    enabled: !!id,
+    refetchOnWindowFocus: false,
+  });
+
+export const useResetDevice = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => resetUserDevice(id),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['user-device-sessions', id] });
+      toast.success('Device registration cleared');
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Failed to reset device'),
+  });
+};
+
+export const useForceLogout = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, platform }) => forceLogoutUser(id, platform),
+    onSuccess: (data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['user-device-sessions', id] });
+      toast.success(data?.message || 'Session terminated');
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Failed to force logout'),
   });
 };

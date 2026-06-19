@@ -3,11 +3,10 @@ import { AlertCircle, AlertTriangle } from 'lucide-react';
 const KEYS = ['can_create', 'can_read', 'can_update', 'can_delete'];
 const LABELS = { can_create: 'C', can_read: 'R', can_update: 'U', can_delete: 'D' };
 
-const on      = 'bg-blue-100 text-blue-700 font-medium ring-1 ring-blue-300';
-const off     = 'bg-gray-100 text-gray-400 hover:bg-gray-200';
-const onApprove  = 'bg-green-100 text-green-700 font-medium ring-1 ring-green-300';
+const on  = 'bg-blue-100 text-blue-700 font-medium ring-1 ring-blue-300';
+const off = 'bg-gray-100 text-gray-400 hover:bg-gray-200';
 
-export default function CrudToggle({ formId, formName, value, onChange, disabled, anomaly, showApprove = false }) {
+export default function CrudToggle({ formId, formName, value, onChange, disabled, anomaly }) {
   function toggle(key) {
     if (disabled) return;
     const next = { ...value };
@@ -18,9 +17,8 @@ export default function CrudToggle({ formId, formName, value, onChange, disabled
       next.can_create = false;
       next.can_update = false;
       next.can_delete = false;
-      next.can_approve = false;
     }
-    if ((key === 'can_create' || key === 'can_update' || key === 'can_delete' || key === 'can_approve') && newVal) {
+    if ((key === 'can_create' || key === 'can_update' || key === 'can_delete') && newVal) {
       next.can_read = true;
     }
     onChange(formId, next);
@@ -41,19 +39,6 @@ export default function CrudToggle({ formId, formName, value, onChange, disabled
           </button>
         </td>
       ))}
-      {showApprove && (
-        <td className="px-1 py-2 text-center">
-          <button
-            type="button"
-            onClick={() => toggle('can_approve')}
-            disabled={disabled}
-            title="Approve/Reject"
-            className={`h-7 w-7 rounded text-xs font-medium transition ${value?.can_approve ? onApprove : off} ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-          >
-            A
-          </button>
-        </td>
-      )}
       <td className="px-2 py-2 text-center">
         {anomaly?.severity === 'error' && (
           <span title={anomaly.message}>

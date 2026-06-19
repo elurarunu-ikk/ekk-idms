@@ -61,10 +61,10 @@ const ADMIN_ITEMS = [
   { to: '/companies', label: 'Companies', icon: 'companies', permission: 'companies' },
   { to: '/projects', label: 'Projects', icon: 'projects', permission: 'projects' },
   { to: '/users', label: 'Users', icon: 'users', permission: 'users' },
-  { to: '/grade-sheet', label: 'Grade Sheet', icon: 'gradesheet', permission: 'projects' },
-  { to: '/reference-data', label: 'Reference Data', icon: 'refdata', permission: 'projects' },
-  { to: '/resources', label: '3M Resources', icon: 'resources', permission: 'projects' },
-  { to: '/masters', label: 'Masters', icon: 'masters', permission: 'projects' },
+  { to: '/grade-sheet', label: 'Grade Sheet', icon: 'gradesheet', permission: 'gradesheet' },
+  { to: '/reference-data', label: 'Reference Data', icon: 'refdata', permission: 'refdata' },
+  { to: '/resources', label: '3M Resources', icon: 'resources', permission: 'resources' },
+  { to: '/masters', label: 'Masters', icon: 'masters', permission: 'masters' },
 ];
 
 const Navbar = () => {

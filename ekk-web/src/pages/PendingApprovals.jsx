@@ -6,6 +6,7 @@ import { approveCapture, rejectCapture, listPendingV2, getApiErrorMessage } from
 import SmartFilterBar from '../components/SmartFilterBar';
 import ConfirmModal from '../components/ConfirmModal';
 import LoadingSpinner from '../components/LoadingSpinner';
+import CapturePreviewPanel from '../components/CapturePreviewPanel';
 import useProjectSession from '../hooks/useProjectSession';
 import {
   formatChainageRange,
@@ -21,6 +22,7 @@ const PendingApprovals = () => {
   const [loading, setLoading] = useState(true);
   const [processingIds, setProcessingIds] = useState(new Set());
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [previewEntry, setPreviewEntry] = useState(null);
 
   const [filters, setFilters] = useState({
     search: '', workType: 'All', layerCode: '',
@@ -210,9 +212,13 @@ const PendingApprovals = () => {
                   return (
                     <tr
                       key={entry.id}
-                      className={`transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                      onClick={() => setPreviewEntry(entry)}
+                      className={`cursor-pointer transition-colors ${
+                        previewEntry?.id === entry.id ? 'bg-blue-50/60' :
+                        isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+                      }`}
                     >
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           className="rounded border-gray-300"
@@ -242,15 +248,8 @@ const PendingApprovals = () => {
                           {age.label}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => navigate(`/captures/${entry.id}`)}
-                            className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs
-                                       font-medium text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            View
-                          </button>
                           <button
                             disabled={isProcessing}
                             onClick={() => handleApprove(entry)}
@@ -355,6 +354,33 @@ const PendingApprovals = () => {
           </div>
         </div>
       )}
+
+      {/* Preview panel with inline Approve / Reject */}
+      <CapturePreviewPanel
+        entry={previewEntry}
+        onClose={() => setPreviewEntry(null)}
+        onOpenFull={() => navigate(`/captures/${previewEntry?.id}`)}
+        footerActions={previewEntry && (
+          <>
+            <button
+              disabled={processingIds.has(previewEntry.id)}
+              onClick={() => { setPreviewEntry(null); handleApprove(previewEntry); }}
+              className="flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium
+                         text-white hover:bg-green-700 transition disabled:opacity-50"
+            >
+              ✓ Approve
+            </button>
+            <button
+              disabled={processingIds.has(previewEntry.id)}
+              onClick={() => { setRejectReason(''); setPreviewEntry(null); setRejectTarget(previewEntry); }}
+              className="flex-1 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium
+                         text-white hover:bg-amber-600 transition disabled:opacity-50"
+            >
+              ✕ Reject
+            </button>
+          </>
+        )}
+      />
 
       {/* Bulk reject modal */}
       {bulkRejectOpen && (

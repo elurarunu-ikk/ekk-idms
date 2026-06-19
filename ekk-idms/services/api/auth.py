@@ -38,9 +38,13 @@ MODULES = [
     "projects",
     "users",
     "companies",
+    "masters",
+    "refdata",
+    "gradesheet",
+    "resources",
 ]
-PRIVILEGED_ROLES = {"SUPER ADMIN", "SUPER_ADMIN", "ADMIN"}
-FULL_ACCESS_ROLES = {"SUPER ADMIN", "SUPER_ADMIN", "ADMIN", "SITE-ADMIN", "SITE_ADMIN"}
+PRIVILEGED_ROLES = {"SUPER ADMIN", "SUPER_ADMIN"}
+FULL_ACCESS_ROLES = {"SUPER ADMIN", "SUPER_ADMIN"}
 
 
 def normalize_user_type(user: User) -> str:
@@ -249,11 +253,10 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     ).first()
 
     if existing_session:
-        if existing_session.expires_at and existing_session.expires_at <= datetime.utcnow():
-            db.delete(existing_session)
-            db.flush()
-        else:
-            raise HTTPException(status_code=409, detail="already_logged_in: An active session already exists on this platform")
+        # Always replace on valid re-authentication — handles token loss, force-logout recovery, etc.
+        invalidate_user_sessions(db, existing_session.user_id, existing_session.jti)
+        db.delete(existing_session)
+        db.flush()
 
     token_jti = str(uuid.uuid4())
     expires_at = datetime.utcnow() + timedelta(minutes=EXPIRE_MINUTES)

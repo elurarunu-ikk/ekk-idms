@@ -577,7 +577,9 @@ const UserManagement = () => {
               <button
                 disabled={editSaving || !editForm.full_name || !editForm.email}
                 onClick={async () => {
-                  if (editForm.user_type !== editUser.user_type) {
+                  const typeChanged = editForm.user_type !== editUser.user_type;
+                  const toSiteScoped = ['SITE_ADMIN', 'USER'].includes(editForm.user_type);
+                  if (typeChanged) {
                     const confirmed = window.confirm(
                       `Change role from ${editUser.user_type} to ${editForm.user_type}?\n\nThis will reset their module rights to new role defaults. They will need to log in again.`
                     );
@@ -588,7 +590,12 @@ const UserManagement = () => {
                     await updateUserV2(editUser.id, editForm);
                     toast.success('User updated successfully');
                     setEditUser(null);
-                    refetch();
+                    if (typeChanged && toSiteScoped) {
+                      toast('Assign sites to this user from their profile.', { icon: '📍' });
+                      navigate(`/users/${editUser.id}`);
+                    } else {
+                      refetch();
+                    }
                   } catch (err) {
                     toast.error(getApiErrorMessage(err, 'Failed to update user'));
                   } finally {

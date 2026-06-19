@@ -1,7 +1,9 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { Platform, NativeModules } from 'react-native';
+import { Platform, NativeModules, Alert } from 'react-native';
 import Constants from 'expo-constants';
+import { logout } from './auth';
+import authEvents from '../utils/authEvents';
 
 const PUBLIC_API_BASE = 'https://solely-deposit-evanescence-jessica.trycloudflare.com';
 function hostFromUri(raw) {
@@ -128,5 +130,30 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const isLoginRequest = error?.config?.url?.includes('/auth/login');
+    if (error?.response?.status === 401 && !isLoginRequest) {
+      try {
+        await logout();
+      } catch (_) {
+        try {
+          const { clearSession } = await import('./session');
+          await clearSession();
+        } catch (_) {}
+      }
+      Alert.alert(
+        'Session Expired',
+        'You have been logged out because your session expired.\n\n' +
+        'Your captured entries are safe — they will sync automatically ' +
+        'after you log in again.',
+        [{ text: 'Log In', onPress: () => authEvents.emit('unauthorized') }]
+      );
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

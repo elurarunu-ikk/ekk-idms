@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IDMS Final Master Roadmap – EKK Infrastructure</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:28px 24px;line-height:1.6;min-width:900px}
+h1{text-align:center;font-size:24px;color:#38bdf8;margin-bottom:4px;letter-spacing:1px}
+.sub{text-align:center;font-size:11px;color:#64748b;margin-bottom:20px}
+
+/* TIMELINE BAR */
+.timeline{display:flex;gap:0;margin:0 0 20px 0;border-radius:10px;overflow:hidden}
+.tl{flex:1;padding:12px 10px;text-align:center;font-size:10px;font-weight:800;line-height:1.5}
+.tl0{background:#065f46;color:#6ee7b7}
+.tl1{background:#1e3a8a;color:#93c5fd}
+.tl2{background:#5b21b6;color:#ddd6fe}
+.tl3{background:#92400e;color:#fcd34d}
+
+/* PHASE BLOCK */
+.phase{margin-bottom:28px;border-radius:12px;overflow:hidden;border:1px solid #1e293b}
+.phase-hdr{padding:16px 22px;display:flex;align-items:center;gap:16px}
+.phase-num{font-size:32px;font-weight:900;min-width:50px;line-height:1}
+.phase-info{flex:1}
+.phase-title{font-size:16px;font-weight:800;letter-spacing:0.3px}
+.phase-meta{font-size:10px;opacity:0.7;margin-top:3px}
+.phase-tag{font-size:10px;font-weight:800;padding:5px 14px;border-radius:20px;white-space:nowrap;margin-left:auto}
+.phase-body{padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+
+.ph0 .phase-hdr{background:#0a2a1a;border-bottom:1px solid #14532d}.ph0 .phase-num,.ph0 .phase-title{color:#6ee7b7}
+.ph0 .phase-tag{background:#065f46;color:#6ee7b7}
+.ph1 .phase-hdr{background:#0c1e35;border-bottom:1px solid #1d3a5e}.ph1 .phase-num,.ph1 .phase-title{color:#7dd3fc}
+.ph1 .phase-tag{background:#1e3a8a;color:#93c5fd}
+.ph2 .phase-hdr{background:#1a0a30;border-bottom:1px solid #3b0764}.ph2 .phase-num,.ph2 .phase-title{color:#d8b4fe}
+.ph2 .phase-tag{background:#5b21b6;color:#ddd6fe}
+.ph3 .phase-hdr{background:#200d04;border-bottom:1px solid #7c2d12}.ph3 .phase-num,.ph3 .phase-title{color:#fb923c}
+.ph3 .phase-tag{background:#92400e;color:#fcd34d}
+
+/* MODULE GRID */
+.mgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.mgrid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mgrid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
+
+/* MODULE CARD */
+.mod{border-radius:10px;padding:13px 15px}
+.mod-icon{font-size:16px;margin-bottom:5px}
+.mod-title{font-size:11px;font-weight:800;margin-bottom:6px}
+.mod-body{font-size:10px;color:#94a3b8;line-height:1.7}
+.mod-body b{color:#e2e8f0}
+.mod-tag{font-size:8px;font-weight:800;padding:2px 6px;border-radius:6px;display:inline-block;margin-top:4px}
+
+.m0{background:#052e16;border:1px solid #14532d}.m0 .mod-title{color:#6ee7b7}
+.m1{background:#0c1e35;border:1px solid #1d3a5e}.m1 .mod-title{color:#7dd3fc}
+.m2{background:#27120a;border:1px solid #451a03}.m2 .mod-title{color:#fcd34d}
+.m3{background:#1e0a38;border:1px solid #3b0764}.m3 .mod-title{color:#d8b4fe}
+.m4{background:#3b0a0a;border:1px solid #7f1d1d}.m4 .mod-title{color:#fca5a5}
+.m5{background:#042f2e;border:1px solid #134e4a}.m5 .mod-title{color:#2dd4bf}
+.m6{background:#2c1206;border:1px solid #7c2d12}.m6 .mod-title{color:#fb923c}
+.m7{background:#1e1b4b;border:1px solid #3730a3}.m7 .mod-title{color:#a5b4fc}
+.m8{background:#111827;border:1px solid #374151}.m8 .mod-title{color:#9ca3af}
+
+/* TASK LIST */
+.tasks{display:flex;flex-direction:column;gap:7px}
+.task{display:flex;gap:12px;padding:10px 14px;border-radius:8px;background:#0f172a;border:1px solid #1e293b;align-items:flex-start}
+.task-week{min-width:58px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;padding-top:1px;flex-shrink:0}
+.task-content{flex:1}
+.task-title{font-size:12px;font-weight:700;margin-bottom:3px}
+.task-body{font-size:10px;color:#94a3b8;line-height:1.5}
+
+/* DB TABLE */
+.dbtbl{width:100%;border-collapse:collapse;font-size:10px}
+.dbtbl th{background:#1e293b;color:#64748b;padding:6px 10px;text-align:left;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:0.5px}
+.dbtbl td{padding:7px 10px;border-bottom:1px solid #1a2535;vertical-align:top}
+.dbtbl tr:last-child td{border-bottom:none}
+.dbtbl tr:hover td{background:#1a2535}
+
+/* COST ROW */
+.cost-row{display:flex;gap:10px;flex-wrap:wrap}
+.cost-box{flex:1;min-width:140px;border-radius:10px;padding:12px;text-align:center}
+.cost-amount{font-size:20px;font-weight:900;margin-bottom:3px}
+.cost-label{font-size:9px;color:#94a3b8;line-height:1.4}
+.cb0{background:#052e16;border:1px solid #14532d}.cb0 .cost-amount{color:#6ee7b7}
+.cb1{background:#0c1e35;border:1px solid #1d3a5e}.cb1 .cost-amount{color:#7dd3fc}
+.cb2{background:#1e0a38;border:1px solid #3b0764}.cb2 .cost-amount{color:#d8b4fe}
+.cb3{background:#27120a;border:1px solid #451a03}.cb3 .cost-amount{color:#fcd34d}
+
+/* INFO/WARN/SUCCESS */
+.info{background:#0c1e35;border:1px solid #1d3a5e;border-radius:8px;padding:11px 14px;font-size:11px;color:#7dd3fc}
+.warn{background:#27120a;border:1px solid #92400e;border-radius:8px;padding:11px 14px;font-size:11px;color:#fcd34d}
+.success{background:#052e16;border:1px solid #14532d;border-radius:8px;padding:11px 14px;font-size:11px;color:#6ee7b7}
+.gap-box{background:#3b0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:11px 14px;font-size:11px;color:#fca5a5}
+
+/* BADGE */
+.bd{font-size:8px;font-weight:800;padding:2px 7px;border-radius:8px;display:inline-block}
+.live{background:#065f46;color:#6ee7b7}
+.p1{background:#1e3a8a;color:#93c5fd}
+.p2{background:#5b21b6;color:#ddd6fe}
+.p3{background:#92400e;color:#fcd34d}
+.free{background:#134e4a;color:#2dd4bf}
+.paid{background:#7f1d1d;color:#fca5a5}
+
+hr{border:none;border-top:1px solid #1e293b;margin:16px 0}
+</style>
+</head>
+<body>
+
+<h1>🏗️ IDMS — Final Master Development Roadmap</h1>
+<p class="sub">EKK Infrastructure Limited &nbsp;·&nbsp; Infrastructure Data Management System &nbsp;·&nbsp; Complete Phase-wise Plan &nbsp;·&nbsp; All Discussions Consolidated</p>
+
+<!-- TIMELINE -->
+<div class="timeline">
+  <div class="tl tl0">✅ PHASE 0<br>LIVE NOW<br>Core System Built</div>
+  <div class="tl tl1">🔵 PHASE 1<br>WEEKS 1–6<br>Reference Data + Validation</div>
+  <div class="tl tl2">🟣 PHASE 2<br>MONTHS 2–5<br>AI Agents + Document Intelligence</div>
+  <div class="tl tl3">🟡 PHASE 3<br>MONTHS 6–12<br>Enterprise Intelligence + Multi-Agent</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- PHASE 0: LIVE NOW -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="phase ph0">
+  <div class="phase-hdr">
+    <div class="phase-num">0</div>
+    <div class="phase-info">
+      <div class="phase-title">✅ Current System — Already Live &amp; Running</div>
+      <div class="phase-meta">FastAPI · PostgreSQL · Mobile App · Web Admin · JWT Auth · capture_router.py</div>
+    </div>
+    <div class="phase-tag">LIVE NOW · ₹0 additional cost</div>
+  </div>
+  <div class="phase-body">
+    <div class="mgrid">
+      <div class="mod m0">
+        <div class="mod-icon">⚙️</div>
+        <div class="mod-title">Backend API</div>
+        <div class="mod-body">
+          <b>FastAPI</b> — all capture endpoints<br>
+          POST /capture/ — field submission<br>
+          GET /capture/pending — approval queue<br>
+          GET /capture/{id} — single entry<br>
+          PUT /capture/{id} — update<br>
+          DELETE /capture/{id} — remove<br>
+          POST /{id}/approve — approve entry<br>
+          POST /{id}/reject — reject with reason<br>
+          <b>JWT Auth</b> — verify_token all routes<br>
+          <b>SQLAlchemy ORM</b> — get_db() session<br>
+          <b>PostgreSQL</b> — SiteDataTransaction table
+        </div>
+        <span class="bd live">LIVE</span>
+      </div>
+      <div class="mod m0">
+        <div class="mod-icon">📱</div>
+        <div class="mod-title">Mobile App (Field)</div>
+        <div class="mod-body">
+          Field engineer capture form<br>
+          <b>10 fields captured:</b><br>
+          project_id · activity_code<br>
+          chainage_from · chainage_to<br>
+          stage · quantity_lm<br>
+          contractor_name · road_side (L/R)<br>
+          rfi_number · layer_section<br><br>
+          approved=False · rejected=False<br>
+          payment_qualifies=False (on submit)
+        </div>
+        <span class="bd live">LIVE</span>
+      </div>
+      <div class="mod m0">
+        <div class="mod-icon">🖥️</div>
+        <div class="mod-title">Web Admin</div>
+        <div class="mod-body">
+          <b>User Management</b><br>
+          Create users · Assign roles &amp; rights<br><br>
+          <b>Project Management</b><br>
+          Create projects · Assign users<br><br>
+          <b>Approval Dashboard</b><br>
+          Pending queue · Approve · Reject<br>
+          Filter by project / stage<br><br>
+          <b>Business Guards (in code):</b><br>
+          ❌ Cannot approve rejected entry<br>
+          ❌ Cannot reject approved entry<br>
+          ❌ Cannot edit/delete approved entry
+        </div>
+        <span class="bd live">LIVE</span>
+      </div>
+    </div>
+    <div class="success">✅ Phase 0 is complete and solid. All Phase 1–3 modules build ON TOP — nothing is replaced or changed in the existing system.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- PHASE 1: REFERENCE DATA + VALIDATION -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="phase ph1">
+  <div class="phase-hdr">
+    <div class="phase-num">1</div>
+    <div class="phase-info">
+      <div class="phase-title">🔵 Reference Data · Validation · Enriched Approval · Reporting</div>
+      <div class="phase-meta">Level Register · OGL · GPS · BOQ · TCS · Validation Engine · QC Tests · ROW · Power BI · n8n</div>
+    </div>
+    <div class="phase-tag">WEEKS 1–6 · ~₹500/month · All tools free</div>
+  </div>
+  <div class="phase-body">
+
+    <!-- MODULE 1.1: GRADE SHEET AUTO IMPORT -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;border-left:3px solid #7dd3fc;padding-left:10px;margin-bottom:8px">MODULE 1.1 — Grade Sheet Auto Import (Week 1)</div>
+    <div class="mgrid">
+      <div class="mod m1">
+        <div class="mod-icon">📊</div>
+        <div class="mod-title">Level Register (All Layers)</div>
+        <div class="mod-body">
+          <b>Source:</b> Original Grade Sheet .xlsx (TBRP format — finalized)<br>
+          <b>One upload endpoint handles all sheets:</b><br>
+          BC, DBM, WMM, CTB, GSB, SUBGRADE, EMBANKMENT TOP<br><br>
+          <b>Auto-detection:</b> Layer code from sheet name/title<br>
+          <b>Auto-mapping:</b> CH column → offsets → SE%/CAMBER% → FRL LME/RME<br>
+          <b>Flexible JSONB:</b> offset_widths + rl_values stores any project's offset configuration<br><br>
+          <b>TBRP ready:</b> 24,584 records (7 layers × 1,756 chainages × L/R)<br>
+          <b>Table:</b> level_register<br>
+          <b>Endpoint:</b> POST /reference-data/upload-grade-sheet
+        </div>
+        <span class="bd p1">Week 1</span>
+      </div>
+      <div class="mod m1">
+        <div class="mod-icon">🌍</div>
+        <div class="mod-title">OGL Data</div>
+        <div class="mod-body">
+          <b>Source:</b> OGL sheet in same Grade Sheet file<br>
+          <b>Structure:</b> Chainage + RL_L30...RL_CL...RL_R30<br>
+          Full corridor survey — 31 measurement points per chainage every 2m from -30m to +30m<br><br>
+          <b>Key calculations enabled by OGL:</b><br>
+          Cut/Fill = EMB FRL − OGL RL_CL<br>
+          Earthwork Volume = Avg area × 10m (CUM)<br>
+          EMB height validation per chainage<br><br>
+          <b>TBRP ready:</b> 3,492 records (1,746 chainages × L/R)<br>
+          <b>Table:</b> ogl · <b>Endpoint:</b> POST /ogl/upload<br>
+          <b>Note:</b> OGL RL is authoritative — GPS altitude is location reference only
+        </div>
+        <span class="bd p1">Week 1</span>
+      </div>
+      <div class="mod m1">
+        <div class="mod-icon">📍</div>
+        <div class="mod-title">GPS Coordinates</div>
+        <div class="mod-body">
+          <b>Source:</b> GPS sheet in same Grade Sheet file<br>
+          <b>Structure:</b> One row per 10m segment<br>
+          chainage_from · chainage_to<br>
+          lat_start · lon_start · alt_start<br>
+          lat_end · lon_end · alt_end<br>
+          PIU · district · NH number<br><br>
+          <b>Purpose in system:</b><br>
+          Location verification for field captures<br>
+          Map display in Web Admin<br>
+          Chainage range validation (mobile GPS vs claimed chainage)<br><br>
+          <b>TBRP ready:</b> 1,754 records (43950→61490)<br>
+          <b>Table:</b> gps_coordinates · <b>Endpoint:</b> POST /gps/upload
+        </div>
+        <span class="bd p1">Week 1</span>
+      </div>
+    </div>
+
+    <!-- MODULE 1.2: PROJECT CONFIG -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;border-left:3px solid #7dd3fc;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 1.2 — Project Configuration (Week 1–2)</div>
+    <div class="mgrid">
+      <div class="mod m2">
+        <div class="mod-icon">⚙️</div>
+        <div class="mod-title">Project Layer Config</div>
+        <div class="mod-body">
+          Per-project offset widths and layer thicknesses<br>
+          <b>Table:</b> project_layer_config<br><br>
+          project_id · layer_code · road_type<br>
+          thickness_mm · camber_type<br>
+          lhs_offsets (JSONB) · rhs_offsets (JSONB)<br>
+          total_width_lhs · total_width_rhs<br>
+          version · is_active · effective_from<br><br>
+          <b>Auto-populated</b> when Grade Sheet is uploaded<br>
+          TBRP: EMB→14.045m, SG→13.3m, BC→12.5m etc.<br>
+          Different projects → same API → different config rows
+        </div>
+        <span class="bd p1">Week 1–2</span>
+      </div>
+      <div class="mod m2">
+        <div class="mod-icon">📐</div>
+        <div class="mod-title">Gradient Config</div>
+        <div class="mod-body">
+          Design gradient per chainage range<br>
+          <b>Table:</b> project_gradient_config<br><br>
+          project_id · chainage_from · chainage_to<br>
+          gradient_pct · gradient_type (RISING/FALLING/FLAT)<br>
+          vpi_chainage · curve_length<br>
+          version · is_active<br><br>
+          <b>Mid-section change handling:</b><br>
+          Each segment has chainage_from/to range<br>
+          Overlap prevention enforced by API<br>
+          New segment = new row (old marked inactive)<br>
+          Capture at CH 49500 → auto-finds correct segment
+        </div>
+        <span class="bd p1">Week 2</span>
+      </div>
+      <div class="mod m2">
+        <div class="mod-icon">🗂️</div>
+        <div class="mod-title">OGL Analysis (Auto-Computed)</div>
+        <div class="mod-body">
+          Computed when OGL + EMB data uploaded<br>
+          <b>Table:</b> ogl_analysis<br><br>
+          project_id · chainage · road_side<br>
+          ogl_rl · emb_frl<br>
+          cut_fill_m = EMB FRL − OGL RL<br>
+          cut_fill_type: CUT / FILL / ZERO<br>
+          cross_area_sqm · volume_cum<br>
+          version · is_active<br><br>
+          <b>Drives:</b> payment_qualifies for earthwork<br>
+          BOQ earthwork quantity reconciliation<br>
+          Finance team payment certification
+        </div>
+        <span class="bd p1">Week 2</span>
+      </div>
+    </div>
+
+    <!-- MODULE 1.3: BOQ -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;border-left:3px solid #7dd3fc;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 1.3 — BOQ Module (Week 2–3)</div>
+    <div class="mgrid">
+      <div class="mod m3">
+        <div class="mod-icon">📋</div>
+        <div class="mod-title">BOQ Items</div>
+        <div class="mod-body">
+          <b>Source:</b> BOQ Excel/PDF per project<br>
+          <b>Table:</b> boq_items<br><br>
+          project_id · item_number · activity_code<br>
+          description · unit (LM/SQM/CUM/NO)<br>
+          stage · road_side<br>
+          boq_quantity (contracted)<br>
+          approved_quantity (accumulates on each approval)<br>
+          rate · amount (auto-computed)<br>
+          version · is_active<br><br>
+          <b>Links to capture via:</b> activity_code + stage<br>
+          <b>Endpoint:</b> POST /boq/upload (Excel CSV)
+        </div>
+        <span class="bd p1">Week 2–3</span>
+      </div>
+      <div class="mod m3">
+        <div class="mod-icon">📊</div>
+        <div class="mod-title">BOQ Summary &amp; Tracking</div>
+        <div class="mod-body">
+          On every approval:<br>
+          boq_items.approved_quantity += entry.quantity_lm<br><br>
+          <b>GET /boq/summary/?project_id=</b><br>
+          Returns per activity_code:<br>
+          contracted_qty · approved_qty · balance · pct_complete<br><br>
+          <b>Over-run detection:</b><br>
+          If balance after approval &lt; 0 → FAIL<br>
+          If balance &lt; 10% → WARN<br><br>
+          <b>Finance view:</b><br>
+          payment_qualifies=True entries grouped by contractor<br>
+          Export to Excel for IPC preparation
+        </div>
+        <span class="bd p1">Week 3</span>
+      </div>
+      <div class="mod m3">
+        <div class="mod-icon">🏗️</div>
+        <div class="mod-title">Cross Section Components</div>
+        <div class="mod-body">
+          Expanded road_side field:<br>
+          L · R · M (Median)<br>
+          PS_L · PS_R (Paved Shoulder)<br>
+          ES_L · ES_R (Earthen Shoulder)<br>
+          SR_L · SR_R (Service Road)<br><br>
+          <b>tcs_components table:</b><br>
+          One row per zone per TCS type<br>
+          Carriageway: BC40+DBM60+CTB180+WMM100+GSB150+SG500<br>
+          Paved Shoulder: BC30+DBM50+CTB160+WMM100+GSB150+SG500<br>
+          Service Road: separate layer stack<br>
+          Median: different (no subgrade in raised median)<br><br>
+          Each component → separate BOQ line item
+        </div>
+        <span class="bd p1">Week 3</span>
+      </div>
+    </div>
+
+    <!-- MODULE 1.4: TCS -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;border-left:3px solid #7dd3fc;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 1.4 — Typical Cross Section Module (Week 3–4)</div>
+    <div class="mgrid">
+      <div class="mod m5">
+        <div class="mod-icon">📏</div>
+        <div class="mod-title">TCS Definitions</div>
+        <div class="mod-body">
+          <b>Table:</b> tcs_definitions<br><br>
+          project_id · tcs_code (TCS-1, TCS-2A...)<br>
+          road_type · psh_m · esh_m · total_width_m<br>
+          drawing_ref · pdf_url (drawing stored in Azure Blob/local)<br>
+          layer_stack (JSONB):<br>
+          [{"seq":1,"code":"EMB","thick_mm":null},<br>
+          &nbsp;{"seq":2,"code":"SG","thick_mm":null},<br>
+          &nbsp;{"seq":7,"code":"BC","thick_mm":40}]<br><br>
+          version · approved_by<br><br>
+          <b>TBRP TCS types from drawings:</b><br>
+          TCS-1/1A/1B/1C · TCS-2/2A/2B/2C<br>
+          TCS-3/3A/3B · TCS-4A/4B · TCS-5/5A · TCS-6/6A
+        </div>
+        <span class="bd p1">Week 3</span>
+      </div>
+      <div class="mod m5">
+        <div class="mod-icon">🗺️</div>
+        <div class="mod-title">TCS Chainage Assignments</div>
+        <div class="mod-body">
+          Maps each TCS to chainage range<br>
+          <b>Table:</b> tcs_assignments<br><br>
+          project_id · tcs_id (FK→tcs_definitions)<br>
+          chainage_from · chainage_to<br>
+          road_side · reason<br>
+          effective_from · effective_to (NULL=active)<br>
+          version · is_active<br><br>
+          <b>Auto-parsed from tcs_ref column in Grade Sheet</b><br><br>
+          <b>TBRP example:</b><br>
+          TCS-1: CH 43950→44560<br>
+          TCS-2A: CH 44560→44810<br>
+          TCS-2: CH 44810→45350<br><br>
+          Validation: capture at CH 44700 → auto-finds TCS-2A
+        </div>
+        <span class="bd p1">Week 3–4</span>
+      </div>
+      <div class="mod m5">
+        <div class="mod-icon">📄</div>
+        <div class="mod-title">TCS Drawing Management</div>
+        <div class="mod-body">
+          PDF drawings uploaded and linked to tcs_definitions<br>
+          <b>Storage:</b> Local server (Phase 1) → Azure Blob (Phase 2)<br><br>
+          <b>Endpoint:</b> POST /cross-sections/{id}/upload-drawing<br><br>
+          <b>Admin approval panel shows:</b><br>
+          When admin opens pending entry at CH 44700 →<br>
+          System finds TCS-2A automatically →<br>
+          Shows TCS-2A PDF drawing inline →<br>
+          Shows expected layer sequence →<br>
+          Shows whether submitted layer matches sequence<br><br>
+          <b>Version control:</b> TCS amendments create new assignment row — old approvals permanently linked to original TCS version
+        </div>
+        <span class="bd p1">Week 4</span>
+      </div>
+    </div>
+
+    <!-- MODULE 1.5: VALIDATION ENGINE -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;border-left:3px solid #7dd3fc;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 1.5 — Validation Engine + Enriched Approval (Week 4–5)</div>
+    <div class="mgrid">
+      <div class="mod m4">
+        <div class="mod-icon">🔍</div>
+        <div class="mod-title">Validation Engine</div>
+        <div class="mod-body">
+          <b>Endpoint:</b> POST /validate/capture/{entry_id}<br>
+          Auto-runs 3 checks on every pending entry:<br><br>
+          <b>Check 1 — Level Register:</b><br>
+          Chainage exists in level_register for this layer?<br>
+          quantity_lm within chainage range distance?<br><br>
+          <b>Check 2 — BOQ Balance:</b><br>
+          activity_code+stage exists in BOQ?<br>
+          contracted_qty − approved_qty − this_entry_qty ≥ 0?<br>
+          "2,500 LM contracted. 1,800 approved. +120 this entry. 580 balance."<br><br>
+          <b>Check 3 — Layer Sequence:</b><br>
+          stage+layer_section matches TCS layer_stack sequence?<br>
+          Previous layer approved before this layer?<br><br>
+          Returns: ValidationSummary JSON with ✅/⚠️/❌ per check
+        </div>
+        <span class="bd p1">Week 4</span>
+      </div>
+      <div class="mod m4">
+        <div class="mod-icon">✅</div>
+        <div class="mod-title">Enriched Approval Panel</div>
+        <div class="mod-body">
+          Admin opens pending entry — sees:<br><br>
+          ✅ Level Register: CH 44700 found, FRL=46.335<br>
+          ✅ BOQ: 48% complete, 580 LM balance<br>
+          ✅ Cross Section: TCS-2A layer sequence correct<br>
+          ✅ QC Test: Compaction test passed (95.2% MDD)<br>
+          ✅ ROW: Chainage cleared for construction<br>
+          ⚠️ BOQ balance &lt; 10% remaining<br><br>
+          <b>On Approval:</b><br>
+          approved_quantity += entry.quantity_lm (BOQ update)<br>
+          payment_qualifies = True (if all PASS)<br>
+          payment_qualifies = False (if any WARN)<br>
+          Stamps: level_register_version_id, tcs_version_id, gradient_version_id<br>
+          (immutable audit trail — protects billing disputes)
+        </div>
+        <span class="bd p1">Week 5</span>
+      </div>
+      <div class="mod m4">
+        <div class="mod-icon">🔒</div>
+        <div class="mod-title">Version Control &amp; Audit Trail</div>
+        <div class="mod-body">
+          <b>Golden Rule: Never update — always append</b><br><br>
+          Every design change creates new row with version+1<br>
+          Old row marked is_active=FALSE (never deleted)<br><br>
+          <b>Tables with versioning:</b><br>
+          level_register · ogl · boq_items<br>
+          project_layer_config · project_gradient_config<br>
+          tcs_definitions · tcs_assignments<br><br>
+          <b>site_data_transactions gets 3 FK stamps:</b><br>
+          level_register_version_id<br>
+          tcs_assignment_version_id<br>
+          gradient_config_version_id<br><br>
+          <b>design_revisions audit log:</b><br>
+          Every change → who changed, when, why, document ref
+        </div>
+        <span class="bd p1">Week 5</span>
+      </div>
+    </div>
+
+    <!-- MODULE 1.6: QC + ROW -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;border-left:3px solid #7dd3fc;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 1.6 — QC Testing + ROW Clearance (Week 5) — Phase 1 Critical Additions</div>
+    <div class="mgrid">
+      <div class="mod m6">
+        <div class="mod-icon">🧪</div>
+        <div class="mod-title">QC Test Results (Basic)</div>
+        <div class="mod-body">
+          <b>Why Phase 1:</b> NHAI contracts require test result before any layer approval is contractually valid<br><br>
+          <b>Table:</b> test_results (simple — not full QC module)<br>
+          entry_id (FK → site_data_transactions)<br>
+          test_type: COMPACTION / GRADATION / CBR / BITUMEN / CORE_CUT<br>
+          result_value · pass_threshold · passed (boolean)<br>
+          tested_by · tested_at · lab_ref<br><br>
+          <b>Validation check:</b> If layer is EMB/SG/BC/DBM and no passing test → payment_qualifies=False with flag "No QC test linked"<br>
+          Admin can still approve — but payment blocked<br><br>
+          Full QC module (IRC frequency, lab integration) → Phase 2
+        </div>
+        <span class="bd p1">Week 5</span>
+      </div>
+      <div class="mod m6">
+        <div class="mod-icon">🏘️</div>
+        <div class="mod-title">ROW Clearance Status</div>
+        <div class="mod-body">
+          <b>Why Phase 1:</b> Field engineer must not submit capture for un-cleared chainage<br><br>
+          <b>Table:</b> row_clearance (small — 4 columns)<br>
+          project_id · chainage_from · chainage_to<br>
+          cleared (boolean) · cleared_date · remarks<br><br>
+          <b>Validation check:</b> capture submission at un-cleared chainage → FAIL<br>
+          "ROW not cleared for CH 48500–48600. Cannot accept capture."<br><br>
+          Admin uploads ROW clearance data per project<br>
+          Updated as clearances are obtained during execution
+        </div>
+        <span class="bd p1">Week 5</span>
+      </div>
+      <div class="mod m6">
+        <div class="mod-icon">📸</div>
+        <div class="mod-title">Site Photo Upload</div>
+        <div class="mod-body">
+          Field engineer attaches photos to capture entry<br><br>
+          Before / During / After layer placement<br>
+          Linked to capture entry UUID<br>
+          Stored: Local server → Azure Blob (Phase 2)<br><br>
+          <b>Table:</b> capture_photos<br>
+          entry_id · photo_type · file_url<br>
+          captured_at · captured_by<br>
+          gps_lat · gps_lon (mobile auto-capture)<br><br>
+          <b>Admin panel:</b> view photos alongside capture entry before approving<br>
+          Dispute resolution evidence for NHAI
+        </div>
+        <span class="bd p1">Week 5</span>
+      </div>
+    </div>
+
+    <!-- MODULE 1.7: REPORTING -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;border-left:3px solid #7dd3fc;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 1.7 — Reporting + Automation (Week 6)</div>
+    <div class="mgrid">
+      <div class="mod m1">
+        <div class="mod-icon">📈</div>
+        <div class="mod-title">Power BI Dashboard</div>
+        <div class="mod-body">
+          Direct PostgreSQL connection (free Desktop)<br><br>
+          <b>Management views:</b><br>
+          BOQ % complete per project per activity<br>
+          Chainage-wise progress map<br>
+          Contractor-wise approved quantity<br>
+          Pending queue age (&gt;24h escalation)<br>
+          payment_qualifies entries by project<br>
+          Cut/fill summary from ogl_analysis<br><br>
+          Share .pbix file with management<br>
+          No Power BI server needed at this stage
+        </div>
+        <span class="bd p1">Week 6</span>
+      </div>
+      <div class="mod m1">
+        <div class="mod-icon">⚙️</div>
+        <div class="mod-title">n8n Workflow Automation</div>
+        <div class="mod-body">
+          Self-hosted — free forever<br><br>
+          <b>Triggers built in Phase 1:</b><br>
+          New capture submitted → notify admin (WhatsApp/Email)<br>
+          Entry pending &gt;24h → escalation alert<br>
+          Entry approved → notify field engineer + finance<br>
+          Entry rejected → notify field engineer with reason<br>
+          Daily 8am report → pending count per project<br>
+          BOQ &gt;90% → alert project manager<br><br>
+          Connects to FastAPI via webhooks<br>
+          No code changes to existing system
+        </div>
+        <span class="bd p1">Week 6</span>
+      </div>
+      <div class="mod m1">
+        <div class="mod-icon">💰</div>
+        <div class="mod-title">Finance Module (Basic)</div>
+        <div class="mod-body">
+          Finance team view — read-only<br><br>
+          GET /finance/payment-ready/?project_id=<br>
+          Returns: all entries where payment_qualifies=True<br>
+          Grouped by contractor · activity · stage<br><br>
+          GET /boq/summary/?project_id=<br>
+          contracted_qty · approved_qty · balance · pct_complete<br>
+          rate · approved_amount (approved_qty × rate)<br><br>
+          Export to Excel for IPC preparation<br>
+          Manual IPC process saved 2–3 days/month<br><br>
+          Full IPC generation → Phase 2
+        </div>
+        <span class="bd p1">Week 6</span>
+      </div>
+    </div>
+
+    <!-- PHASE 1 DB TABLES -->
+    <div style="font-size:12px;font-weight:800;color:#7dd3fc;margin-bottom:8px;margin-top:4px">All Database Tables Created in Phase 1</div>
+    <table class="dbtbl">
+      <tr><th>Table</th><th>Purpose</th><th>Key Columns</th><th>Versioned</th><th>Week</th></tr>
+      <tr><td><b style="color:#7dd3fc">level_register</b></td><td>FRL per chainage per layer per side</td><td>layer_code, chainage, road_side, frl_center, offset_widths (JSONB), rl_values (JSONB)</td><td>✅</td><td>1</td></tr>
+      <tr><td><b style="color:#7dd3fc">ogl</b></td><td>Original Ground Level per chainage</td><td>chainage, road_side, ogl_cl, rl_values (JSONB) — 31 offset points</td><td>✅</td><td>1</td></tr>
+      <tr><td><b style="color:#7dd3fc">gps_coordinates</b></td><td>Centre line GPS per 10m segment</td><td>chainage_from, chainage_to, lat_start, lon_start, alt_start, lat_end, lon_end</td><td>❌</td><td>1</td></tr>
+      <tr><td><b style="color:#6ee7b7">project_layer_config</b></td><td>Per-project offset widths and thickness</td><td>project_id, layer_code, lhs_offsets (JSONB), rhs_offsets (JSONB), thickness_mm</td><td>✅</td><td>1</td></tr>
+      <tr><td><b style="color:#6ee7b7">project_gradient_config</b></td><td>Gradient segments per chainage range</td><td>project_id, chainage_from, chainage_to, gradient_pct, gradient_type, vpi_chainage</td><td>✅</td><td>2</td></tr>
+      <tr><td><b style="color:#6ee7b7">ogl_analysis</b></td><td>Auto-computed cut/fill and earthwork volume</td><td>chainage, road_side, ogl_rl, emb_frl, cut_fill_m, cut_fill_type, volume_cum</td><td>✅</td><td>2</td></tr>
+      <tr><td><b style="color:#fcd34d">boq_items</b></td><td>BOQ quantities per activity per project</td><td>project_id, activity_code, stage, boq_quantity, approved_quantity, rate, unit</td><td>✅</td><td>2–3</td></tr>
+      <tr><td><b style="color:#fcd34d">tcs_definitions</b></td><td>TCS drawing details and layer stack</td><td>project_id, tcs_code, psh_m, esh_m, layer_stack (JSONB), pdf_url, drawing_ref</td><td>✅</td><td>3</td></tr>
+      <tr><td><b style="color:#fcd34d">tcs_assignments</b></td><td>TCS to chainage range mapping</td><td>project_id, tcs_id, chainage_from, chainage_to, road_side, effective_from, effective_to</td><td>✅</td><td>3–4</td></tr>
+      <tr><td><b style="color:#fcd34d">tcs_components</b></td><td>Per-zone layer stacks (CW/PS/ES/SR/Median)</td><td>tcs_id, component (CARRIAGEWAY/PAVED_SHOULDER/MEDIAN...), layer_stack (JSONB), width_m</td><td>✅</td><td>3</td></tr>
+      <tr><td><b style="color:#fca5a5">test_results</b></td><td>QC test results linked to capture entries</td><td>entry_id, test_type, result_value, pass_threshold, passed, tested_by, lab_ref</td><td>❌</td><td>5</td></tr>
+      <tr><td><b style="color:#fca5a5">row_clearance</b></td><td>ROW clearance status per chainage range</td><td>project_id, chainage_from, chainage_to, cleared, cleared_date, remarks</td><td>❌</td><td>5</td></tr>
+      <tr><td><b style="color:#fca5a5">capture_photos</b></td><td>Site photos linked to capture entries</td><td>entry_id, photo_type, file_url, gps_lat, gps_lon, captured_at</td><td>❌</td><td>5</td></tr>
+      <tr><td><b style="color:#fca5a5">design_revisions</b></td><td>Audit log for all design changes</td><td>project_id, table_name, record_id, new_record_id, change_type, change_reason, changed_by</td><td>N/A</td><td>5</td></tr>
+      <tr><td><b style="color:#2dd4bf">site_data_transactions<br>(3 new columns)</b></td><td>Version stamps on approval — immutable audit</td><td>+level_register_version_id, +tcs_assignment_version_id, +gradient_config_version_id</td><td>N/A</td><td>5</td></tr>
+    </table>
+
+    <!-- PHASE 1 COSTS -->
+    <div class="cost-row">
+      <div class="cost-box cb0"><div class="cost-amount">₹0</div><div class="cost-label">Software cost<br>All open source tools</div></div>
+      <div class="cost-box cb1"><div class="cost-amount">pandas · openpyxl<br>Alembic · python-multipart</div><div class="cost-label">Libraries to install<br>pip install — all free</div></div>
+      <div class="cost-box cb1"><div class="cost-amount">6 weeks</div><div class="cost-label">Total build time<br>1 developer with Claude Code</div></div>
+      <div class="cost-box cb0"><div class="cost-amount">Very High</div><div class="cost-label">Business value<br>Every approval backed by evidence</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- PHASE 2: AI AGENTS -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="phase ph2">
+  <div class="phase-hdr">
+    <div class="phase-num">2</div>
+    <div class="phase-info">
+      <div class="phase-title">🟣 AI Agents · Document Intelligence · Advanced QC · Structure Module</div>
+      <div class="phase-meta">Surveyor Agent · Quantity Auditor · Specs Bot · LangChain · Chroma · Azure Blob · IPC · Structures</div>
+    </div>
+    <div class="phase-tag">MONTHS 2–5 · ~₹2,000–5,000/month · AI API costs only</div>
+  </div>
+  <div class="phase-body">
+    <div class="warn">⚠️ <b>Prerequisite:</b> All Phase 1 tables must be populated. The 3 AI agents need Level Register, BOQ, TCS, OGL, and QC data in PostgreSQL to function. Without that data — agents have nothing to reason on.</div>
+
+    <!-- AI AGENTS -->
+    <div style="font-size:12px;font-weight:800;color:#d8b4fe;border-left:3px solid #d8b4fe;padding-left:10px;margin-bottom:8px">MODULE 2.1 — The 3 AI Agents (Months 2–4)</div>
+    <div class="mgrid">
+      <div class="mod m7">
+        <div class="mod-icon">🧭</div>
+        <div class="mod-title">Surveyor Agent</div>
+        <div class="mod-body">
+          <b>Built with:</b> LangChain + Claude API<br>
+          <b>Data needed:</b> level_register + ogl + gps_coordinates<br><br>
+          <b>What it checks automatically:</b><br>
+          ✓ chainage_from/to vs Level Register — does FRL exist?<br>
+          ✓ quantity_lm vs actual chainage distance — geometry valid?<br>
+          ✓ RL levels consistent with design FRL — within tolerance?<br>
+          ✓ EMB height = EMB FRL − OGL RL — valid?<br>
+          ✓ GPS coordinates match claimed chainage location<br>
+          ✓ Detects geometry errors before admin review<br><br>
+          <b>Output:</b> geometry_validation JSON with pass/fail/reason<br>
+          <b>Endpoint:</b> POST /agents/surveyor/{entry_id}
+        </div>
+        <span class="bd p2">Month 2–3</span>
+      </div>
+      <div class="mod m7">
+        <div class="mod-icon">📊</div>
+        <div class="mod-title">Quantity Auditor Agent</div>
+        <div class="mod-body">
+          <b>Built with:</b> CrewAI + Claude API<br>
+          <b>Data needed:</b> boq_items + level_register + site_data_transactions<br><br>
+          <b>What it checks automatically:</b><br>
+          ✓ activity_code+stage exists in BOQ?<br>
+          ✓ contracted vs approved vs balance per activity<br>
+          ✓ Duplicate chainage claim detection<br>
+          ✓ Over-claim before payment_qualifies is set<br>
+          ✓ Contractor-wise reconciliation across projects<br>
+          ✓ "BOQ balance negative — over-claimed on A-14"<br>
+          ✓ "Same CH 44700–44800 claimed twice by different contractors"<br><br>
+          <b>Output:</b> audit_summary JSON with flags<br>
+          <b>Endpoint:</b> POST /agents/auditor/{entry_id}
+        </div>
+        <span class="bd p2">Month 3</span>
+      </div>
+      <div class="mod m7">
+        <div class="mod-icon">📋</div>
+        <div class="mod-title">Technical Specs Bot</div>
+        <div class="mod-body">
+          <b>Built with:</b> LangChain + Chroma RAG + Claude API<br>
+          <b>Data needed:</b> tcs_definitions + cross_sections + spec documents<br><br>
+          <b>What it does:</b><br>
+          ✓ Layer sequence check — is WMM reported before CTB?<br>
+          ✓ Material spec validation per TCS layer stack<br>
+          ✓ Admin types: "What is compaction spec for WMM?"<br>
+          &nbsp;&nbsp;→ Bot searches uploaded Word/PDF spec documents<br>
+          &nbsp;&nbsp;→ Returns exact IRC clause answer<br>
+          ✓ Flags non-compliant entries automatically<br>
+          ✓ "Wearing course reported — base course not yet approved"<br><br>
+          <b>Output:</b> compliance_check + spec_answer<br>
+          <b>Endpoint:</b> POST /agents/specs/{entry_id}
+        </div>
+        <span class="bd p2">Month 4</span>
+      </div>
+    </div>
+
+    <!-- DOCUMENT INTELLIGENCE -->
+    <div style="font-size:12px;font-weight:800;color:#d8b4fe;border-left:3px solid #d8b4fe;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 2.2 — Document Intelligence (Month 2)</div>
+    <div class="mgrid">
+      <div class="mod m3">
+        <div class="mod-icon">🧠</div>
+        <div class="mod-title">Chroma Vector DB</div>
+        <div class="mod-body">
+          Runs locally — free<br>
+          Embeds all spec documents for semantic search<br><br>
+          Documents embedded:<br>
+          Word spec documents (python-docx)<br>
+          Digital PDF BOQs (pdfplumber)<br>
+          Method statements<br>
+          IRC specification references<br><br>
+          Admin asks: "What is subgrade CBR requirement?"<br>
+          → System searches all embedded spec docs<br>
+          → Returns exact clause from IRC SP-84<br>
+          → No manual file search needed
+        </div>
+        <span class="bd p2">Month 2</span>
+      </div>
+      <div class="mod m3">
+        <div class="mod-icon">☁️</div>
+        <div class="mod-title">Azure Blob Storage</div>
+        <div class="mod-body">
+          Upgrade from local file storage<br>
+          Free tier: 5GB · Then ~₹150/GB<br><br>
+          Files stored:<br>
+          TCS PDF drawings<br>
+          RFI documents<br>
+          Scanned spec documents<br>
+          Site photos from capture entries<br>
+          BOQ PDF originals<br><br>
+          URLs stored in DB — linked to records<br>
+          Admin views drawings inline in approval panel<br>
+          No file server management needed
+        </div>
+        <span class="bd p2">Month 2</span>
+      </div>
+      <div class="mod m3">
+        <div class="mod-icon">🔍</div>
+        <div class="mod-title">Azure Doc Intelligence</div>
+        <div class="mod-body">
+          OCR for scanned documents<br>
+          Free: 500 pages/month<br><br>
+          Use cases:<br>
+          Scanned TCS PDF drawings → extract dimensions<br>
+          Handwritten RFI forms → digitise text<br>
+          Scanned BOQ pages → extract tables<br>
+          Old method statements → make searchable<br><br>
+          DWG/DXF files:<br>
+          ezdxf library (free Python)<br>
+          Convert AutoCAD files → extract chainage + layer data<br>
+          Convert DWG → PDF for display
+        </div>
+        <span class="bd p2">Month 3</span>
+      </div>
+    </div>
+
+    <!-- PHASE 2 OTHER MODULES -->
+    <div style="font-size:12px;font-weight:800;color:#d8b4fe;border-left:3px solid #d8b4fe;padding-left:10px;margin-bottom:8px;margin-top:6px">MODULE 2.3 — Structures · Full QC · IPC · Material Management (Month 4–5)</div>
+    <div class="mgrid4">
+      <div class="mod m8">
+        <div class="mod-icon">🌉</div>
+        <div class="mod-title">Structure Register</div>
+        <div class="mod-body">
+          Bridges · VUPs · SVUPs · Culverts<br>
+          Separate from pavement capture<br><br>
+          TBRP structures:<br>
+          CH 50+750 Minor Bridge (TCS-4B)<br>
+          CH 60+676 Minor Bridge (TCS-4A)<br>
+          CH 51+708 VUP (TCS-5)<br>
+          CH 54+722 SVUP (TCS-5A)<br><br>
+          Foundation · Substructure<br>
+          Superstructure · Finishing<br>
+          Concrete pour records<br>
+          Rebar BBS reconciliation
+        </div>
+        <span class="bd p2">Month 4</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">🧪</div>
+        <div class="mod-title">Full QC Module</div>
+        <div class="mod-body">
+          Expands Phase 1 basic test linkage:<br><br>
+          IRC frequency tracking<br>
+          (1 test per 500m per layer per IRC)<br>
+          Failed test / re-test workflow<br>
+          Third party NABL lab integration<br>
+          Roughness / IRI measurement<br>
+          Core cutting thickness verification<br>
+          Marshall stability for bituminous<br>
+          Test certificate PDF upload
+        </div>
+        <span class="bd p2">Month 4</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">💰</div>
+        <div class="mod-title">IPC Generation</div>
+        <div class="mod-body">
+          Interim Payment Certificate<br>
+          Auto-generated from approved entries<br><br>
+          Period selection (monthly)<br>
+          Sum of payment_qualifies=True entries<br>
+          Grouped by contractor · activity<br>
+          Rate × quantity = amount per line<br>
+          Price escalation index (NHAI formula)<br>
+          Export as PDF + Excel<br>
+          Saves 2–3 days manual work per month
+        </div>
+        <span class="bd p2">Month 5</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">🧱</div>
+        <div class="mod-title">Material Management</div>
+        <div class="mod-body">
+          Material source register<br>
+          (approved quarries per project)<br>
+          Bitumen receipt + test certificate<br>
+          Daily stock register<br>
+          Consumption vs BOQ reconciliation<br>
+          Wastage factor tracking<br>
+          Royalty challan linkage<br>
+          Prevents material diversion
+        </div>
+        <span class="bd p2">Month 5</span>
+      </div>
+    </div>
+
+    <!-- PHASE 2 TECH + COST -->
+    <table class="dbtbl">
+      <tr><th>Tool</th><th>Purpose in Phase 2</th><th>Cost</th></tr>
+      <tr><td><b style="color:#d8b4fe">Claude API (Anthropic)</b></td><td>AI reasoning for all 3 agents — analysis, validation, anomaly detection</td><td><span class="bd paid">~₹2–5K/month usage</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">LangChain</b></td><td>Surveyor Agent + Specs Bot framework — RAG pipeline, document loaders</td><td><span class="bd free">Free · Open Source</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">CrewAI</b></td><td>Quantity Auditor Agent — multi-tool agent with reasoning loop</td><td><span class="bd free">Free · Open Source</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">Chroma</b></td><td>Vector DB for document embedding and semantic search</td><td><span class="bd free">Free · Runs Locally</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">pdfplumber</b></td><td>Extract tables and text from digital PDF BOQ and spec documents</td><td><span class="bd free">Free · pip install</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">python-docx</b></td><td>Extract text from Word specification and method statement documents</td><td><span class="bd free">Free · pip install</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">ezdxf</b></td><td>Read AutoCAD DWG/DXF — extract chainage and layer data</td><td><span class="bd free">Free · pip install</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">Azure Blob Storage</b></td><td>Store PDF drawings, scanned docs, site photos</td><td><span class="bd paid">Free 5GB · ₹150/GB after</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">Azure Document Intelligence</b></td><td>OCR for scanned drawings and forms</td><td><span class="bd paid">500 pages/month free</span></td></tr>
+      <tr><td><b style="color:#d8b4fe">n8n (expanded)</b></td><td>Trigger agents, escalate anomalies, daily AI summary reports</td><td><span class="bd free">Free · Already set up</span></td></tr>
+    </table>
+
+    <div class="cost-row">
+      <div class="cost-box cb2"><div class="cost-amount">₹0</div><div class="cost-label">Framework cost<br>LangChain · CrewAI · Chroma</div></div>
+      <div class="cost-box cb2"><div class="cost-amount">₹2–5K/mo</div><div class="cost-label">Claude API calls<br>Usage-based only</div></div>
+      <div class="cost-box cb2"><div class="cost-amount">3 months</div><div class="cost-label">Build time<br>1 developer</div></div>
+      <div class="cost-box cb2"><div class="cost-amount">Very High</div><div class="cost-label">Approval quality<br>dramatically improves</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- PHASE 3: ENTERPRISE INTELLIGENCE -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="phase ph3">
+  <div class="phase-hdr">
+    <div class="phase-num">3</div>
+    <div class="phase-info">
+      <div class="phase-title">🟡 Enterprise Intelligence · Multi-Agent · Programme · Safety · Environment</div>
+      <div class="phase-meta">CrewAI Multi-Agent · LangGraph · Retool · Pinecone · Programme Tracking · Safety · Labour · Drainage</div>
+    </div>
+    <div class="phase-tag">MONTHS 6–12 · ~₹5,000–15,000/month</div>
+  </div>
+  <div class="phase-body">
+
+    <div class="mgrid2">
+      <div class="mod m6">
+        <div class="mod-icon">🤝</div>
+        <div class="mod-title">Multi-Agent Crew (CrewAI)</div>
+        <div class="mod-body">
+          All 3 Phase 2 agents now coordinate as a crew:<br><br>
+          <b>Site Agent:</b> monitors all captures real-time<br>
+          <b>Procurement Agent:</b> tracks contractor performance, flags over-claims<br>
+          <b>Planning Agent:</b> forecasts BOQ completion dates, identifies delays<br>
+          <b>Commercial Agent:</b> auto-prepares payment certificates<br><br>
+          Agents communicate — Site Agent alerts Procurement Agent when contractor over-claims.<br>
+          Planning Agent tells MD: "Project 2 will complete 68% of BOQ by month end"
+        </div>
+        <span class="bd p3">Month 6–7</span>
+      </div>
+      <div class="mod m6">
+        <div class="mod-icon">🔀</div>
+        <div class="mod-title">LangGraph Orchestration</div>
+        <div class="mod-body">
+          State-driven complex approval workflows:<br><br>
+          "If BOQ &gt;90% complete → auto-escalate to MD"<br>
+          "If duplicate chainage → hold payment automatically"<br>
+          "If 3 consecutive test fails → stop approvals for that contractor"<br>
+          "If pending &gt;48h → escalate to IE + PIU"<br><br>
+          Multi-level approval chain:<br>
+          SE → AE → IE → PIU (NHAI standard)<br>
+          Each level gets appropriate view and authority<br>
+          Replaces manual decision trees
+        </div>
+        <span class="bd p3">Month 7–8</span>
+      </div>
+    </div>
+
+    <div class="mgrid4">
+      <div class="mod m8">
+        <div class="mod-icon">📅</div>
+        <div class="mod-title">Programme &amp; Milestones</div>
+        <div class="mod-body">
+          L2 baseline schedule per project<br>
+          NHAI milestone tracking with penalty flags<br>
+          S-curve: planned vs actual per week<br>
+          Critical path chainage identification<br>
+          EOT claim source data<br>
+          Hindrance register (LA / utility / rain)<br>
+          Planning Agent forecasts using actual approval rate
+        </div>
+        <span class="bd p3">Month 8</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">📊</div>
+        <div class="mod-title">Retool Executive Dashboard</div>
+        <div class="mod-body">
+          Internal tool builder — faster than React<br>
+          Free for up to 5 users<br><br>
+          MD-level: all projects at a glance<br>
+          Real-time BOQ burn rate per contractor<br>
+          AI-generated weekly health report<br>
+          One-click: project → activity → entry<br>
+          Cross-project comparison
+        </div>
+        <span class="bd p3">Month 8</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">🦺</div>
+        <div class="mod-title">Safety &amp; Labour</div>
+        <div class="mod-body">
+          Safety incident register<br>
+          PPE compliance checklist<br>
+          Daily labour muster (ESIC/PF)<br>
+          Sub-contractor register (NHAI)<br>
+          Traffic management plan status<br>
+          Crash barrier installation log<br>
+          3rd party safety audit compliance
+        </div>
+        <span class="bd p3">Month 9</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">🧠</div>
+        <div class="mod-title">Pinecone Cross-Project Memory</div>
+        <div class="mod-body">
+          Upgrade from Chroma for scale<br>
+          Free tier: 100K vectors<br><br>
+          Search across ALL historical projects<br>
+          Contractor performance history<br>
+          "Show all CH 1200–1400 approvals ever"<br>
+          Seasonal productivity patterns<br>
+          Anomaly detection uses history
+        </div>
+        <span class="bd p3">Month 9–10</span>
+      </div>
+    </div>
+
+    <div class="mgrid4">
+      <div class="mod m8">
+        <div class="mod-icon">💧</div>
+        <div class="mod-title">Drainage Module</div>
+        <div class="mod-body">
+          Culvert register per chainage<br>
+          Side drain / catch drain capture<br>
+          Drain gradient validation (min 0.3%)<br>
+          Cross drainage BOQ tracking<br>
+          Outlet connection status
+        </div>
+        <span class="bd p3">Month 10</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">🚧</div>
+        <div class="mod-title">Equipment &amp; Plant</div>
+        <div class="mod-body">
+          Plant deployment register<br>
+          Paver calibration records<br>
+          Roller passes log<br>
+          Hot mix plant production log<br>
+          Breakdown log (EOT evidence)
+        </div>
+        <span class="bd p3">Month 10</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">🌿</div>
+        <div class="mod-title">Environmental Compliance</div>
+        <div class="mod-body">
+          EMP monthly compliance report<br>
+          Tree plantation tracking<br>
+          Borrow area management<br>
+          SPCB pollution control records<br>
+          Statutory submissions tracking
+        </div>
+        <span class="bd p3">Month 11</span>
+      </div>
+      <div class="mod m8">
+        <div class="mod-icon">🤝</div>
+        <div class="mod-title">Contractor Performance</div>
+        <div class="mod-body">
+          Rejection rate per contractor<br>
+          Quality failure tracking<br>
+          NCR (Non-Conformance) register<br>
+          Penalty / LD tracking<br>
+          Dispute resolution evidence<br>
+          Cross-project contractor scores
+        </div>
+        <span class="bd p3">Month 12</span>
+      </div>
+    </div>
+
+    <div class="cost-row">
+      <div class="cost-box cb3"><div class="cost-amount">₹0</div><div class="cost-label">Framework cost<br>CrewAI · LangGraph · Retool free tier</div></div>
+      <div class="cost-box cb3"><div class="cost-amount">₹5–15K/mo</div><div class="cost-label">API + cloud costs<br>Scale dependent</div></div>
+      <div class="cost-box cb3"><div class="cost-amount">6 months</div><div class="cost-label">Build time<br>Months 6–12</div></div>
+      <div class="cost-box cb3"><div class="cost-amount">Strategic</div><div class="cost-label">Competitive advantage<br>Intelligence-driven EPC</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- ROLE BASED ACCESS SUMMARY -->
+<!-- ══════════════════════════════════════════════════ -->
+<hr>
+<div style="background:#0f172a;border:1.5px solid #1e293b;border-radius:12px;padding:18px 22px;margin-bottom:20px">
+  <div style="font-size:13px;font-weight:800;color:#38bdf8;margin-bottom:12px">👥 Role-Based Access — Who Sees What Across All Phases</div>
+  <table class="dbtbl">
+    <tr><th>Role</th><th>Phase 0 (Now)</th><th>Phase 1 (Added)</th><th>Phase 2 (Added)</th></tr>
+    <tr>
+      <td><b style="color:#7dd3fc">👷 Site Engineer (Mobile)</b></td>
+      <td>Submit captures · View own status</td>
+      <td>View Level Register (read) · View BOQ balance · View ROW clearance · Upload site photos · GPS auto-captured on submit</td>
+      <td>See AI validation results for own submissions · Spec Q&amp;A chatbot</td>
+    </tr>
+    <tr>
+      <td><b style="color:#fcd34d">🛡️ Admin / Approver</b></td>
+      <td>Approve/Reject queue · User management · Project management</td>
+      <td>Upload Grade Sheet (auto-import all layers) · Upload BOQ · Enter TCS · View enriched validation panel (✅/⚠️/❌) before approving · Link QC tests to entries</td>
+      <td>AI agent results visible in approval panel · Specs Bot Q&amp;A · Document search · Photo evidence view</td>
+    </tr>
+    <tr>
+      <td><b style="color:#6ee7b7">💰 Commercial / Finance</b></td>
+      <td>—</td>
+      <td>payment_qualifies=True entries · BOQ summary by contractor · Export Excel for IPC</td>
+      <td>Auto-generated IPC · Price escalation calc · Material reconciliation</td>
+    </tr>
+    <tr>
+      <td><b style="color:#d8b4fe">📊 Management</b></td>
+      <td>—</td>
+      <td>Power BI: BOQ % complete · Chainage progress · Pending queue age · n8n daily reports</td>
+      <td>Retool executive dashboard · AI weekly summary · Cross-project comparison · S-curve planning vs actual</td>
+    </tr>
+    <tr>
+      <td><b style="color:#fb923c">🤖 AI Agents</b></td>
+      <td>—</td>
+      <td>—</td>
+      <td>Surveyor: geometry + level · Auditor: BOQ + duplicate · Specs Bot: layer compliance · Daily anomaly scan · Weekly forecast report</td>
+    </tr>
+  </table>
+</div>
+
+<!-- FINAL COST SUMMARY -->
+<div style="background:#052e16;border:1px solid #14532d;border-radius:12px;padding:18px 22px">
+  <div style="font-size:13px;font-weight:800;color:#6ee7b7;margin-bottom:12px">✅ Total Cost Summary — Complete IDMS Stack Across All Phases</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:140px">
+      <div style="font-size:22px;font-weight:900;color:#6ee7b7">₹0</div>
+      <div style="font-size:10px;color:#94a3b8">Phase 0 + Phase 1<br>All open source tools</div>
+    </div>
+    <div style="flex:1;min-width:140px">
+      <div style="font-size:22px;font-weight:900;color:#d8b4fe">₹2–5K/mo</div>
+      <div style="font-size:10px;color:#94a3b8">Phase 2 running cost<br>Claude API usage only</div>
+    </div>
+    <div style="flex:1;min-width:140px">
+      <div style="font-size:22px;font-weight:900;color:#fcd34d">₹5–15K/mo</div>
+      <div style="font-size:10px;color:#94a3b8">Phase 3 running cost<br>Scale dependent</div>
+    </div>
+    <div style="flex:1;min-width:140px">
+      <div style="font-size:22px;font-weight:900;color:#2dd4bf">₹0 forever</div>
+      <div style="font-size:10px;color:#94a3b8">Framework cost<br>LangChain · CrewAI · Chroma · n8n</div>
+    </div>
+    <div style="flex:1;min-width:140px">
+      <div style="font-size:22px;font-weight:900;color:#6ee7b7">16/20</div>
+      <div style="font-size:10px;color:#94a3b8">Tools are free or<br>open source</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

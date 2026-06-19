@@ -2,6 +2,7 @@
 Permission service — read/write form rights, anomaly detection, audit log.
 """
 from __future__ import annotations
+import json
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
@@ -13,6 +14,8 @@ from models.user_mgmt_models import (
     PermissionAuditLog, RevokedToken, UserCompanyAssignment,
     UserFormRight, UserModuleAssignment, UserSiteAssignment, UserType,
 )
+from models.user_project_access import UserProjectAccess
+from models.project import Project
 from schemas.user_schemas import (
     AnomalyCheckResponse, AnomalyFinding, FormRightRequest,
     FormRightResponse, PermissionSummaryResponse,
@@ -28,8 +31,19 @@ ANOMALY_RULES = [
 ]
 
 
+def _parse_permissions_json(value) -> dict:
+    if not value:
+        return {}
+    if isinstance(value, dict):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+
 def get_effective_permissions(db: Session, user_id: UUID) -> PermissionSummaryResponse:
-    """Return all companies, sites, modules, and form rights for a user."""
+    """Return per-site permission breakdowns built from UserProjectAccess."""
     from models.user import User
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -41,26 +55,31 @@ def get_effective_permissions(db: Session, user_id: UUID) -> PermissionSummaryRe
             user_id=user_id, user_type=user_type, is_super=True,
         )
 
-    company_rows = db.query(UserCompanyAssignment).filter(UserCompanyAssignment.user_id == user_id).all()
-    site_rows    = db.query(UserSiteAssignment).filter(UserSiteAssignment.user_id == user_id).all()
-    module_rows  = db.query(UserModuleAssignment).filter(UserModuleAssignment.user_id == user_id).all()
-    right_rows   = db.query(UserFormRight).filter(UserFormRight.user_id == user_id).all()
+    assignments = (
+        db.query(UserProjectAccess, Project)
+        .join(Project, Project.id == UserProjectAccess.project_id)
+        .filter(
+            UserProjectAccess.user_id == user_id,
+            UserProjectAccess.is_active == True,
+        )
+        .all()
+    )
+
+    sites_with_permissions = [
+        {
+            "project_id": str(project.id),
+            "project_code": project.project_code,
+            "project_name": project.name,
+            "permissions": _parse_permissions_json(assignment.permissions_json),
+        }
+        for assignment, project in assignments
+    ]
 
     return PermissionSummaryResponse(
         user_id=user_id,
         user_type=user_type,
         is_super=False,
-        company_ids=[r.company_id for r in company_rows],
-        site_ids=[r.site_id for r in site_rows],
-        module_ids=[r.module_id for r in module_rows],
-        form_rights=[
-            FormRightResponse(
-                form_id=r.form_id, form_name=r.form_name,
-                can_create=r.can_create, can_read=r.can_read,
-                can_update=r.can_update, can_delete=r.can_delete,
-            )
-            for r in right_rows
-        ],
+        sites_with_permissions=sites_with_permissions,
     )
 
 
