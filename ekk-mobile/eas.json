@@ -15,7 +15,7 @@
       "distribution": "internal",
       "env": {
         "APP_VARIANT": "preview",
-        "EXPO_PUBLIC_API_BASE": "https://solely-deposit-evanescence-jessica.trycloudflare.com"
+        "EXPO_PUBLIC_API_BASE": "https://idms.ikkuips.co.in"
       },
       "android": {
         "buildType": "apk"
