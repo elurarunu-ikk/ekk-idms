@@ -1,9 +1,11 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { Platform, NativeModules } from 'react-native';
+import { Platform, NativeModules, Alert } from 'react-native';
 import Constants from 'expo-constants';
+import { logout } from './auth';
+import authEvents from '../utils/authEvents';
 
-const PUBLIC_API_BASE = 'https://pray-fur-hart-favourite.trycloudflare.com';
+const PUBLIC_API_BASE = 'https://solely-deposit-evanescence-jessica.trycloudflare.com';
 function hostFromUri(raw) {
   if (!raw || typeof raw !== 'string') return '';
   try {
@@ -38,7 +40,9 @@ function normalizeApiBase(rawBase, defaultPort = '80', fallbackProtocol = 'http'
   if (!trimmed) return '';
 
   const addPort = (parsed) => {
-    if (!parsed.port && /^https?:$/.test(parsed.protocol)) {
+    // Only force port for http:// — https:// uses 443 by default and CDN/tunnel
+    // hosts reject connections attempted on port 80 over HTTPS
+    if (!parsed.port && parsed.protocol === 'http:') {
       parsed.port = defaultPort;
     }
     return parsed.toString().replace(/\/+$/, '');
@@ -126,5 +130,30 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const isLoginRequest = error?.config?.url?.includes('/auth/login');
+    if (error?.response?.status === 401 && !isLoginRequest) {
+      try {
+        await logout();
+      } catch (_) {
+        try {
+          const { clearSession } = await import('./session');
+          await clearSession();
+        } catch (_) {}
+      }
+      Alert.alert(
+        'Session Expired',
+        'You have been logged out because your session expired.\n\n' +
+        'Your captured entries are safe — they will sync automatically ' +
+        'after you log in again.',
+        [{ text: 'Log In', onPress: () => authEvents.emit('unauthorized') }]
+      );
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

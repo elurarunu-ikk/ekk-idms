@@ -3,6 +3,16 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Alert
 } from 'react-native';
+
+// Alert.alert is a no-op on Expo web — use this wrapper instead
+function showAlert(title, message) {
+  if (Platform.OS === 'web') {
+    // eslint-disable-next-line no-alert
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+}
 import NetInfo from '@react-native-community/netinfo';
 import { login, tryOfflineLogin } from '../services/auth';
 import { getApiErrorMessage, API_BASE } from '../services/api';
@@ -23,7 +33,7 @@ export default function LoginScreen({ navigation }) {
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert('Error', 'Enter email and password');
+      showAlert('Error', 'Enter email and password');
       return;
     }
     setLoading(true);
@@ -42,7 +52,7 @@ export default function LoginScreen({ navigation }) {
     } catch (e) {
       console.log('Login error:', e?.response?.status, e?.message);
       const msg = getApiErrorMessage(e);
-      Alert.alert('Login Failed', msg);
+      showAlert('Login Failed', msg);
     } finally {
       setLoading(false);
     }
@@ -63,14 +73,14 @@ export default function LoginScreen({ navigation }) {
         <Text style={styles.brand}>EKK IDMS</Text>
         <Text style={styles.sub}>Field Capture System</Text>
 
-        <Text style={styles.label}>Email</Text>
+        <Text style={styles.label}>Username or Email</Text>
         <TextInput
           style={styles.input}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="engineer@ekk.in"
+          keyboardType="default"
+          placeholder="username or email"
         />
 
         <Text style={styles.label}>Password</Text>

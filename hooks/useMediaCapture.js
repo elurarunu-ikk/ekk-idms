@@ -7,7 +7,7 @@ import { useState, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { getInfoAsync } from 'expo-file-system/legacy';
+import { getInfoAsync, deleteAsync } from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import api from '../services/api';
 import { getMode, loadRetryQueue, saveRetryQueue } from '../utils/offlineQueue';
@@ -266,9 +266,21 @@ export function useMediaCapture() {
         timeout: 60000,   // 60s timeout for large videos
       });
       console.log('[media] Upload success:', response.data);
+
+      // Delete local file after confirmed server upload — native only
+      // Web uses blob URLs which don't map to real files
+      if (Platform.OS !== 'web' && item.uri?.startsWith('file://')) {
+        try {
+          await deleteAsync(item.uri, { idempotent: true });
+          console.log('[media] Local file deleted after upload:', item.name);
+        } catch (deleteErr) {
+          // Non-fatal — server already has the file
+          console.warn('[media] Could not delete local file:', deleteErr.message);
+        }
+      }
     } catch (error) {
       console.log('[media] Upload error details:', error.response?.data);
-      throw error;
+      throw error;  // Do NOT delete local file on upload failure
     }
 
     console.log(`[media] Uploaded ${mediaType}: ${item.name}`);

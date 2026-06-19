@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,20 +19,20 @@ import * as DocumentPicker from 'expo-document-picker';
 import { getInfoAsync } from 'expo-file-system/legacy';
 import api from '../services/api';
 import { useNetworkMode } from '../hooks/useNetworkMode';
-import { addSubmittedEntryId, loadQueue, removeFromQueue, markFailed, updateQueueEntry } from '../utils/offlineQueue';
+import { addSubmittedEntryId, loadQueue, removeFromQueue, markFailed, updateQueueEntry, purgeSubmittedEntries, getQueueStats } from '../utils/offlineQueue';
 import { capturePhotoWithGPSOverlay } from '../utils/gpsOverlay';
 import { getSelectedProject } from '../services/session';
 import {
-  WORK_TYPES,
-  LAYERS,
-  STRUCTURE_TYPES,
+  loadMasters,
   getActivitiesForWorkType,
   getRoadActivitiesForLayer,
   getStructureElementsForType,
   getStructureActivitiesForSelection,
   deriveStageFromSelection,
-  STRUCTURE_ELEMENT_ACTIVITY_MAP,
-} from '../constants/data';
+  FALLBACK_MATERIALS,
+  FALLBACK_EQUIPMENT,
+  FALLBACK_MANPOWER,
+} from '../services/masters';
 
 const WEATHER_OPTIONS = [
   { label: 'Sunny', value: 'SUNNY' },
@@ -44,6 +44,8 @@ const PROGRESS_STATUS_OPTIONS = [
   { label: 'In Progress/Ongoing', value: 'ONGOING' },
   { label: 'Completed', value: 'COMPLETED' },
 ];
+const MATERIAL_UNITS = ['CUM', 'MT', 'KG', 'BAG', 'NOS', 'LM', 'LTR', 'SQM', 'TON'];
+const SHIFT_TYPES = ['DAY', 'NIGHT'];
 
 function normalizeProgressStatus(value) {
   const normalized = String(value || '').trim().toUpperCase();
@@ -129,19 +131,53 @@ export default function EntriesScreen() {
   const [editQuantity, setEditQuantity] = useState(null);
   const [mediaBusy, setMediaBusy] = useState(false);
 
+  // ── Edit modal 3M states ──────────────────────────────────────────────────
+  const [editMaterialsUsed,    setEditMaterialsUsed]    = useState([]);
+  const [editMachinesDeployed, setEditMachinesDeployed] = useState([]);
+  const [editManpowerDeployed, setEditManpowerDeployed] = useState([]);
+  const [editShow3M,           setEditShow3M]           = useState(false);
+
+  const [editAddingMat,  setEditAddingMat]  = useState(false);
+  const [editAddingMach, setEditAddingMach] = useState(false);
+  const [editAddingMp,   setEditAddingMp]   = useState(false);
+
+  const [editNewMat,  setEditNewMat]  = useState({ code: '', qty: '', unit: '', source: '' });
+  const [editNewMach, setEditNewMach] = useState({ code: '', count: '', hours: '' });
+  const [editNewMp,   setEditNewMp]   = useState({ category: '', count: '', shift: '' });
+
+  const [editMatErr,  setEditMatErr]  = useState(false);
+  const [editMachErr, setEditMachErr] = useState(false);
+  const [editMpErr,   setEditMpErr]   = useState(false);
+
+  const [masters, setMasters] = useState(null);
+  const [queueStats, setQueueStats] = useState(null);
+
   const showEditLayerSelector = editForm.work_type === 'ROAD';
   const showEditStructureTypeSelector = editForm.work_type === 'STRUCTURE';
   const showEditElementSelector = editForm.work_type === 'STRUCTURE';
-  const editAvailableElements = showEditElementSelector ? getStructureElementsForType(editForm.structure_type) : [];
+  const editAvailableElements = showEditElementSelector
+    ? getStructureElementsForType(masters, editForm.structure_type)
+    : [];
   const editAvailableActivities = showEditLayerSelector
-    ? getRoadActivitiesForLayer(editForm.layer_code)
+    ? getRoadActivitiesForLayer(masters, editForm.layer_code)
     : showEditElementSelector
-      ? getStructureActivitiesForSelection(editForm.structure_type, editForm.element_code)
-      : getActivitiesForWorkType(editForm.work_type);
+      ? getStructureActivitiesForSelection(masters, editForm.structure_type, editForm.element_code)
+      : getActivitiesForWorkType(masters, editForm.work_type);
 
   useFocusEffect(useCallback(() => {
+    let active = true;
+    loadMasters()
+      .then(data => { if (active) setMasters(data); })
+      .catch(() => {});
+    (async () => {
+      await purgeSubmittedEntries();
+      const stats = await getQueueStats();
+      if (active) setQueueStats(stats);
+    })();
     void refreshEntries();
+    return () => { active = false; };
   }, [effectiveMode]));
+
 
   async function refreshEntries() {
     const project = await getSelectedProject();
@@ -222,31 +258,18 @@ export default function EntriesScreen() {
     return Number.isFinite(n) ? n : null;
   }
 
-  // ── Infer work type ───────────────────────────────────────────────────────
+  // ── Infer work type (fallback for legacy entries without work_type set) ───
   function inferWorkType(stageCode, activityCode) {
-    if (LAYERS.some((layer) => layer.code === stageCode)) return 'ROAD';
+    if ((masters?.layers ?? []).some(l => l.code === stageCode)) return 'ROAD';
     if (['DRAIN', 'ANCILLARY', 'MISC'].includes(stageCode)) return stageCode;
-    if (Object.values(STRUCTURE_ELEMENT_ACTIVITY_MAP).some((elementMap) => Object.keys(elementMap).includes(stageCode))) {
-      return 'STRUCTURE';
-    }
-    const activity = ['ROAD', 'STRUCTURE', 'DRAIN', 'ANCILLARY', 'MISC']
-      .flatMap((workType) => getActivitiesForWorkType(workType))
-      .find((item) => item.code === activityCode);
-    if (activity?.workTypes?.includes('ROAD')) return 'ROAD';
-    if (activity?.workTypes?.includes('STRUCTURE')) return 'STRUCTURE';
-    if (activity?.workTypes?.includes('DRAIN')) return 'DRAIN';
-    if (activity?.workTypes?.includes('ANCILLARY')) return 'ANCILLARY';
-    if (activity?.workTypes?.includes('MISC')) return 'MISC';
-    return '';
-  }
-
-  function inferStructureType(stageCode, activityCode) {
-    if (!stageCode) return '';
-    for (const structureType of STRUCTURE_TYPES) {
-      const mappedActivities = STRUCTURE_ELEMENT_ACTIVITY_MAP[structureType.code]?.[stageCode] || [];
-      if (!mappedActivities.length) continue;
-      if (!activityCode || mappedActivities.includes(activityCode)) return structureType.code;
-    }
+    if ((masters?.elements ?? []).some(e => e.code === stageCode)) return 'STRUCTURE';
+    const act = (masters?.activities ?? []).find(a => a.code === activityCode);
+    const wt = act?.work_types || act?.workTypes || [];
+    if (wt.includes('ROAD')) return 'ROAD';
+    if (wt.includes('STRUCTURE')) return 'STRUCTURE';
+    if (wt.includes('DRAIN')) return 'DRAIN';
+    if (wt.includes('ANCILLARY')) return 'ANCILLARY';
+    if (wt.includes('MISC')) return 'MISC';
     return '';
   }
 
@@ -336,6 +359,11 @@ export default function EntriesScreen() {
 
   // ── Edit modal handlers ────────────────────────────────────────────────────
   function openEdit(item) {
+    console.log('[openEdit 3M]', JSON.stringify({
+      materials: item.payload.materials_used,
+      machines: item.payload.machines_deployed,
+      manpower: item.payload.manpower_deployed,
+    }));
     const cf = floatToChainageFmt(item.payload.chainage_from);
     const ct = floatToChainageFmt(item.payload.chainage_to);
     const f = chainageFmtToFloat(cf);
@@ -346,9 +374,7 @@ export default function EntriesScreen() {
     const dateStr = item.payload.entry_date || '';
     const parsedDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
     const workType = item.payload.work_type || inferWorkType(item.payload.stage, item.payload.activity_code);
-    const structureType = workType === 'STRUCTURE'
-      ? (item.payload.structure_type || inferStructureType(item.payload.stage, item.payload.activity_code))
-      : '';
+    const structureType = workType === 'STRUCTURE' ? (item.payload.structure_type || '') : '';
     const layerCode = workType === 'ROAD' ? (item.payload.layer_code || item.payload.stage || '') : '';
     const elementCode = workType === 'STRUCTURE' ? (item.payload.element_code || item.payload.stage || '') : '';
 
@@ -382,6 +408,47 @@ export default function EntriesScreen() {
       progress_status: normalizeProgressStatus(item.payload.progress_status),
       remarks: item.payload.remarks || '',
     });
+
+    // Populate 3M from existing payload
+    const p = item.payload;
+    setEditMaterialsUsed(
+      Array.isArray(p.materials_used)
+        ? p.materials_used.map(m => ({
+            code: m.material_code || '',
+            qty:  String(m.quantity ?? ''),
+            unit: m.unit || 'CUM',
+            source: m.source || '',
+          }))
+        : []
+    );
+    setEditMachinesDeployed(
+      Array.isArray(p.machines_deployed)
+        ? p.machines_deployed.map(m => ({
+            code:  m.machine_code || '',
+            count: String(m.count ?? '1'),
+            hours: String(m.hours ?? ''),
+          }))
+        : []
+    );
+    setEditManpowerDeployed(
+      Array.isArray(p.manpower_deployed)
+        ? p.manpower_deployed.map(m => ({
+            category: m.category || 'SKILLED',
+            count:    String(m.count ?? ''),
+            shift:    m.shift_type || 'DAY',
+          }))
+        : []
+    );
+    setEditShow3M(false);
+    setEditAddingMat(false);
+    setEditAddingMach(false);
+    setEditAddingMp(false);
+    setEditNewMat({ code: '', qty: '', unit: '', source: '' });
+    setEditNewMach({ code: '', count: '', hours: '' });
+    setEditNewMp({ category: '', count: '', shift: '' });
+    setEditMatErr(false);
+    setEditMachErr(false);
+    setEditMpErr(false);
   }
 
   function updateEditWorkType(workType) {
@@ -506,6 +573,29 @@ export default function EntriesScreen() {
       remarks: editForm.remarks || null,
       entry_date: `${y}-${mo}-${d}`,
       quantity_lm: finalQty,
+      materials_used: editMaterialsUsed
+        .filter(m => m.code)
+        .map(m => ({
+          material_code: m.code,
+          quantity: m.qty ? Number(m.qty) : null,
+          unit: m.unit || null,
+          source: m.source || null,
+        })),
+      machines_deployed: editMachinesDeployed
+        .filter(m => m.code && m.count)
+        .map(m => ({
+          machine_code:  m.code,
+          count:         Number(m.count),
+          hours:         m.hours ? Number(m.hours) : null,
+          operator_name: null,
+        })),
+      manpower_deployed: editManpowerDeployed
+        .filter(m => m.category)
+        .map(m => ({
+          category:   m.category,
+          count:      m.count ? Number(m.count) : null,
+          shift_type: m.shift || 'DAY',
+        })),
     };
 
     await updateQueueEntry(editItem.localId, updated, editMediaItems);
@@ -730,6 +820,50 @@ export default function EntriesScreen() {
           <Text style={styles.subtitle}>Submitted entries and offline sync status</Text>
         </View>
 
+        {queueStats && (
+          <View style={styles.storagePanel}>
+            <View style={[styles.statChip, queueStats.pending > 0 && styles.statChipAmber]}>
+              <Text style={styles.statChipLabel}>⏳ Pending sync</Text>
+              <Text style={[styles.statChipValue, queueStats.pending > 0 && styles.statChipValueAmber]}>
+                {queueStats.pending}
+              </Text>
+            </View>
+
+            {queueStats.failed > 0 && (
+              <View style={[styles.statChip, styles.statChipRed]}>
+                <Text style={styles.statChipLabel}>❌ Failed</Text>
+                <Text style={[styles.statChipValue, styles.statChipValueRed]}>
+                  {queueStats.failed}
+                </Text>
+              </View>
+            )}
+
+            {queueStats.submittedCount > 0 ? (
+              <View style={styles.statChip}>
+                <Text style={styles.statChipLabel}>✓ Submitted (7d)</Text>
+                <Text style={styles.statChipValue}>{queueStats.submittedCount}</Text>
+              </View>
+            ) : queueStats.pending === 0 && queueStats.failed === 0 ? (
+              <View style={[styles.statChip, styles.statChipGreen]}>
+                <Text style={styles.statChipLabel}>✓ All synced</Text>
+              </View>
+            ) : null}
+
+            <View style={[styles.statChip, styles.statChipGray]}>
+              <Text style={styles.statChipLabel}>💾 Local</Text>
+              <Text style={styles.statChipValue}>
+                {queueStats.storageSizeKB < 1 ? '<1 KB' : `${queueStats.storageSizeKB} KB`}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {queueStats?.submittedCount > 0 && (
+          <Text style={styles.retentionNote}>
+            Submitted entries kept for {queueStats.retentionDays} days · Pending entries kept until synced
+          </Text>
+        )}
+
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Submitted Online</Text>
           <TouchableOpacity style={styles.refreshBtn} onPress={() => { void refreshEntries(); }}>
@@ -909,7 +1043,7 @@ export default function EntriesScreen() {
           <View style={styles.modalField}>
             <Text style={styles.modalLabel}>Work Type</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalPillScroll}>
-              {WORK_TYPES.map((workType) => (
+              {(masters?.workTypes ?? []).map((workType) => (
                 <TouchableOpacity
                   key={workType.code}
                   style={[styles.modalPill, editForm.work_type === workType.code && styles.modalPillActive]}
@@ -925,7 +1059,7 @@ export default function EntriesScreen() {
             <View style={styles.modalField}>
               <Text style={styles.modalLabel}>Structure Type</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalPillScroll}>
-                {STRUCTURE_TYPES.map((type) => (
+                {(masters?.structureTypes ?? []).map((type) => (
                   <TouchableOpacity
                     key={type.code}
                     style={[styles.modalPill, editForm.structure_type === type.code && styles.modalPillActive]}
@@ -942,7 +1076,7 @@ export default function EntriesScreen() {
             <View style={styles.modalField}>
               <Text style={styles.modalLabel}>Layer</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.modalPillScroll}>
-                {LAYERS.map((layer) => (
+                {(masters?.layers ?? []).filter(l => !l.work_type_code || l.work_type_code === 'ROAD').map((layer) => (
                   <TouchableOpacity
                     key={layer.code}
                     style={[styles.modalPill, editForm.layer_code === layer.code && styles.modalPillActive]}
@@ -1234,6 +1368,278 @@ export default function EntriesScreen() {
             </ScrollView>
           )}
 
+          {/* ── 3M Resources ── */}
+          <TouchableOpacity
+            style={styles.threeMToggle}
+            onPress={() => setEditShow3M(v => !v)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.threeMToggleTitle}>3M Resources</Text>
+              <Text style={styles.threeMToggleSub}>
+                {editMaterialsUsed.length + editMachinesDeployed.length + editManpowerDeployed.length === 0
+                  ? 'Tap to log Materials, Machines & Manpower'
+                  : `${editMaterialsUsed.length} material · ${editMachinesDeployed.length} machine · ${editManpowerDeployed.length} manpower`}
+              </Text>
+            </View>
+            <Text style={styles.threeMToggleChev}>{editShow3M ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+
+          {editShow3M && (
+            <View style={styles.threeMBody}>
+
+              {/* ── MATERIALS ── */}
+              <Text style={styles.threeMSectionTitle}>Materials Used</Text>
+              {editMaterialsUsed.map((m, i) => (
+                <View key={i} style={styles.resourceCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resourceCardCode}>{m.code}</Text>
+                    <Text style={styles.resourceCardMeta}>
+                      {m.qty} {m.unit}{m.source ? ` · from ${m.source}` : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => setEditMaterialsUsed(p => p.filter((_, j) => j !== i))}
+                  >
+                    <Text style={styles.removeBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {editAddingMat ? (
+                <View style={styles.inlineForm}>
+                  <Text style={[styles.inlineLabel, editMatErr && !editNewMat.code && styles.inlineLabelError]}>
+                    Material{editMatErr && !editNewMat.code ? ' *' : ''}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={[{ marginBottom: 8 }, editMatErr && !editNewMat.code && styles.inlinePillError]}
+                  >
+                    {(masters?.materials ?? FALLBACK_MATERIALS).map(m => (
+                      <TouchableOpacity
+                        key={m.code}
+                        style={[styles.miniPill, editNewMat.code === m.code && styles.miniPillActive]}
+                        onPress={() => setEditNewMat(p => ({ ...p, code: m.code, unit: p.unit || m.default_unit || '' }))}
+                      >
+                        <Text style={[styles.miniPillText, editNewMat.code === m.code && styles.miniPillTextActive]}>
+                          {m.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <View style={styles.twoColInline}>
+                    <TextInput
+                      style={[styles.inlineInput, { flex: 1 }, editMatErr && !editNewMat.qty && styles.inlineInputError]}
+                      placeholder="Quantity *"
+                      placeholderTextColor="#c7c2c2"
+                      value={editNewMat.qty}
+                      onChangeText={v => setEditNewMat(p => ({ ...p, qty: v }))}
+                      keyboardType="decimal-pad"
+                    />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1.5 }}>
+                      {MATERIAL_UNITS.map(u => (
+                        <TouchableOpacity
+                          key={u}
+                          style={[styles.miniPill, editNewMat.unit === u && styles.miniPillActive]}
+                          onPress={() => setEditNewMat(p => ({ ...p, unit: u }))}
+                        >
+                          <Text style={[styles.miniPillText, editNewMat.unit === u && styles.miniPillTextActive]}>
+                            {u}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                  <TextInput
+                    style={styles.inlineInput}
+                    placeholder="Source / supplier (optional)"
+                    placeholderTextColor="#c7c2c2"
+                    value={editNewMat.source}
+                    onChangeText={v => setEditNewMat(p => ({ ...p, source: v }))}
+                  />
+                  <View style={styles.inlineActions}>
+                    <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
+                      if (!editNewMat.code || !editNewMat.qty) { setEditMatErr(true); return; }
+                      setEditMaterialsUsed(p => [...p, editNewMat]);
+                      setEditNewMat({ code: '', qty: '', unit: '', source: '' });
+                      setEditMatErr(false);
+                      setEditAddingMat(false);
+                    }}>
+                      <Text style={styles.addConfirmText}>Add Material</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => { setEditAddingMat(false); setEditMatErr(false); }}>
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.addResourceBtn} onPress={() => setEditAddingMat(true)}>
+                  <Text style={styles.addResourceBtnText}>+ Add Material</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* ── MACHINES ── */}
+              <Text style={[styles.threeMSectionTitle, { marginTop: 16 }]}>Machines Deployed</Text>
+              {editMachinesDeployed.map((m, i) => (
+                <View key={i} style={styles.resourceCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resourceCardCode}>{m.code}</Text>
+                    <Text style={styles.resourceCardMeta}>
+                      {m.count} unit(s) · {m.hours ? `${m.hours}h` : 'hours not set'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => setEditMachinesDeployed(p => p.filter((_, j) => j !== i))}
+                  >
+                    <Text style={styles.removeBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {editAddingMach ? (
+                <View style={styles.inlineForm}>
+                  <Text style={[styles.inlineLabel, editMachErr && !editNewMach.code && styles.inlineLabelError]}>
+                    Machine Type{editMachErr && !editNewMach.code ? ' *' : ''}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={[{ marginBottom: 8 }, editMachErr && !editNewMach.code && styles.inlinePillError]}
+                  >
+                    {(masters?.equipment ?? FALLBACK_EQUIPMENT).map(e => (
+                      <TouchableOpacity
+                        key={e.code}
+                        style={[styles.miniPill, editNewMach.code === e.code && styles.miniPillActive]}
+                        onPress={() => setEditNewMach(p => ({ ...p, code: e.code }))}
+                      >
+                        <Text style={[styles.miniPillText, editNewMach.code === e.code && styles.miniPillTextActive]}>
+                          {e.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <TextInput
+                    style={styles.inlineInput}
+                    placeholder="Number of machines (default: 1)"
+                    placeholderTextColor="#c7c2c2"
+                    value={editNewMach.count}
+                    onChangeText={v => setEditNewMach(p => ({ ...p, count: v }))}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    style={styles.inlineInput}
+                    placeholder="Hours worked (optional)"
+                    placeholderTextColor="#c7c2c2"
+                    value={editNewMach.hours}
+                    onChangeText={v => setEditNewMach(p => ({ ...p, hours: v }))}
+                    keyboardType="decimal-pad"
+                  />
+                  <View style={styles.inlineActions}>
+                    <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
+                      if (!editNewMach.code) { setEditMachErr(true); return; }
+                      setEditMachinesDeployed(p => [...p, { ...editNewMach, count: editNewMach.count || '1' }]);
+                      setEditNewMach({ code: '', count: '', hours: '' });
+                      setEditMachErr(false);
+                      setEditAddingMach(false);
+                    }}>
+                      <Text style={styles.addConfirmText}>Add Machine</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => { setEditAddingMach(false); setEditMachErr(false); }}>
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.addResourceBtn} onPress={() => setEditAddingMach(true)}>
+                  <Text style={styles.addResourceBtnText}>+ Add Machine</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* ── MANPOWER ── */}
+              <Text style={[styles.threeMSectionTitle, { marginTop: 16 }]}>Manpower Deployed</Text>
+              {editManpowerDeployed.map((m, i) => (
+                <View key={i} style={styles.resourceCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resourceCardCode}>{m.category}</Text>
+                    <Text style={styles.resourceCardMeta}>{m.count} workers · {m.shift} shift</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => setEditManpowerDeployed(p => p.filter((_, j) => j !== i))}
+                  >
+                    <Text style={styles.removeBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {editAddingMp ? (
+                <View style={styles.inlineForm}>
+                  <Text style={[styles.inlineLabel, editMpErr && !editNewMp.category && styles.inlineLabelError]}>
+                    Category{editMpErr && !editNewMp.category ? ' *' : ''}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={[{ marginBottom: 8 }, editMpErr && !editNewMp.category && styles.inlinePillError]}
+                  >
+                    {(masters?.manpowerCategories ?? FALLBACK_MANPOWER).map(c => (
+                      <TouchableOpacity
+                        key={c.code}
+                        style={[styles.miniPill, editNewMp.category === c.code && styles.miniPillActive]}
+                        onPress={() => setEditNewMp(p => ({ ...p, category: c.code }))}
+                      >
+                        <Text style={[styles.miniPillText, editNewMp.category === c.code && styles.miniPillTextActive]}>
+                          {c.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <TextInput
+                    style={styles.inlineInput}
+                    placeholder="Number of workers (default: 1)"
+                    placeholderTextColor="#c7c2c2"
+                    value={editNewMp.count}
+                    onChangeText={v => setEditNewMp(p => ({ ...p, count: v }))}
+                    keyboardType="numeric"
+                  />
+                  <Text style={styles.inlineLabel}>Shift</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                    {SHIFT_TYPES.map(s => (
+                      <TouchableOpacity
+                        key={s}
+                        style={[styles.miniPill, { flex: 1, justifyContent: 'center' },
+                                editNewMp.shift === s && styles.miniPillActive]}
+                        onPress={() => setEditNewMp(p => ({ ...p, shift: s }))}
+                      >
+                        <Text style={[styles.miniPillText, editNewMp.shift === s && styles.miniPillTextActive]}>
+                          {s}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.inlineActions}>
+                    <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
+                      if (!editNewMp.category) { setEditMpErr(true); return; }
+                      setEditManpowerDeployed(p => [...p, { ...editNewMp, count: editNewMp.count || '1', shift: editNewMp.shift || 'DAY' }]);
+                      setEditNewMp({ category: '', count: '', shift: '' });
+                      setEditMpErr(false);
+                      setEditAddingMp(false);
+                    }}>
+                      <Text style={styles.addConfirmText}>Add Manpower</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => { setEditAddingMp(false); setEditMpErr(false); }}>
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.addResourceBtn} onPress={() => setEditAddingMp(true)}>
+                  <Text style={styles.addResourceBtnText}>+ Add Manpower</Text>
+                </TouchableOpacity>
+              )}
+
+            </View>
+          )}
+
           <TouchableOpacity style={styles.saveEditBtn} onPress={saveEdit}>
             <Text style={styles.saveEditText}>Save Changes</Text>
           </TouchableOpacity>
@@ -1332,4 +1738,44 @@ const styles = StyleSheet.create({
   modalFileChipMeta: { fontSize: 11, color: '#666' },
   saveEditBtn: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   saveEditText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  threeMToggle:      { flexDirection: 'row', alignItems: 'center', margin: 16, marginTop: 20, padding: 14, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e0e0e0' },
+  threeMToggleTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
+  threeMToggleSub:   { fontSize: 11, color: '#aaa', marginTop: 2 },
+  threeMToggleChev:  { fontSize: 14, color: '#888', marginLeft: 8 },
+  threeMBody:        { marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#e0e0e0', marginBottom: 8 },
+  threeMSectionTitle:{ fontSize: 12, fontWeight: '700', color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  resourceCard:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f0', borderRadius: 8, padding: 10, marginBottom: 6 },
+  resourceCardCode:  { fontSize: 13, fontWeight: '700', color: '#1a1a1a' },
+  resourceCardMeta:  { fontSize: 11, color: '#666', marginTop: 2 },
+  removeBtn:         { backgroundColor: '#fee2e2', borderRadius: 8, padding: 6, marginLeft: 8 },
+  removeBtnText:     { fontSize: 12, color: '#dc2626', fontWeight: '700' },
+  inlineForm:        { backgroundColor: '#f5f5f0', borderRadius: 10, padding: 12, marginBottom: 8 },
+  inlineLabel:       { fontSize: 11, color: '#666', fontWeight: '600', marginBottom: 4 },
+  inlineInput:       { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, padding: 10, fontSize: 14, color: '#1a1a1a', marginBottom: 8 },
+  twoColInline:      { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 8 },
+  miniPill:          { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff', marginRight: 6, alignItems: 'center' },
+  miniPillActive:    { backgroundColor: '#1a1a1a', borderColor: '#1a1a1a' },
+  miniPillText:      { fontSize: 11, fontWeight: '600', color: '#555' },
+  miniPillTextActive:{ color: '#fff' },
+  inlineActions:     { flexDirection: 'row', gap: 8 },
+  addConfirmBtn:     { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, alignItems: 'center' },
+  addConfirmText:    { color: '#fff', fontSize: 13, fontWeight: '600' },
+  cancelBtn:         { backgroundColor: '#f0f0f0', borderRadius: 8, padding: 10, alignItems: 'center', paddingHorizontal: 16 },
+  cancelBtnText:     { color: '#555', fontSize: 13, fontWeight: '600' },
+  addResourceBtn:    { borderStyle: 'dashed', borderWidth: 1, borderColor: '#bbb', borderRadius: 8, padding: 10, alignItems: 'center', marginBottom: 4 },
+  addResourceBtnText:{ color: '#555', fontSize: 13, fontWeight: '600' },
+  inlineInputError:  { borderColor: '#ef4444', borderWidth: 2 },
+  inlinePillError:   { borderWidth: 1, borderColor: '#ef4444', borderRadius: 8 },
+  inlineLabelError:  { color: '#ef4444' },
+  storagePanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  statChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  statChipAmber: { backgroundColor: '#fffbeb', borderColor: '#f59e0b' },
+  statChipRed: { backgroundColor: '#fef2f2', borderColor: '#ef4444' },
+  statChipGray: { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' },
+  statChipLabel: { fontSize: 11, color: '#64748b' },
+  statChipValue: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
+  statChipValueAmber: { color: '#d97706' },
+  statChipValueRed: { color: '#dc2626' },
+  statChipGreen: { backgroundColor: '#f0fdf4', borderColor: '#22c55e' },
+  retentionNote: { fontSize: 10, color: '#94a3b8', textAlign: 'center', paddingVertical: 4, backgroundColor: '#f8fafc' },
 });

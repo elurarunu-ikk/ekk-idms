@@ -50,12 +50,15 @@ export const ACTIVITY_CONFIG = {
 };
 
 export const LAYERS = [
+  { code: 'EMBANKMENT', label: 'Embankment' },
   { code: 'SUBGRADE', label: 'Subgrade' },
   { code: 'GSB', label: 'GSB' },
+  { code: 'CTSB', label: 'CTSB' },
+  { code: 'CTB', label: 'CTB' },
   { code: 'WMM', label: 'WMM' },
   { code: 'BASE', label: 'Base Course' },
-  { code: 'BINDER', label: 'Binder Course' },
-  { code: 'WEARING', label: 'Wearing Course' },
+  { code: 'BINDER', label: 'Binder Course (DBM)' },
+  { code: 'WEARING', label: 'Wearing Course (BC)' },
   { code: 'PRIME', label: 'Prime Coat' },
   { code: 'TACK', label: 'Tack Coat' },
   { code: 'SHOULDER', label: 'Shoulder' },
@@ -154,13 +157,13 @@ export const ACTIVITIES = [
 ];
 
 export const ROAD_ACTIVITY_LAYER_MAP = {
-  EARTHWORK: ['SUBGRADE'],
-  COMPACTION: ['SUBGRADE', 'WMM'],
+  EARTHWORK: ['EMBANKMENT', 'SUBGRADE'],
+  COMPACTION: ['EMBANKMENT', 'SUBGRADE', 'WMM', 'CTSB', 'CTB'],
   GSB_LAY: ['GSB'],
-  SPREADING: ['GSB'],
-  ROLLING: ['GSB'],
+  SPREADING: ['GSB', 'CTSB', 'CTB'],
+  ROLLING: ['GSB', 'CTSB', 'CTB'],
   WMM_LAY: ['WMM', 'BASE'],
-  DLC: ['BASE'],
+  DLC: ['BASE', 'CTSB', 'CTB'],
   DBM: ['BINDER'],
   BC: ['WEARING'],
   SDBC: ['WEARING'],

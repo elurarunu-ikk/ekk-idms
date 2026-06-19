@@ -17,6 +17,9 @@ const SUBMITTED_ENTRY_IDS_KEY = 'ekk_submitted_entry_ids';
 const SQLITE_MIGRATION_KEY = 'ekk_sqlite_migrated_v1';
 const QUEUE_METADATA_MIGRATION_KEY = 'ekk_queue_metadata_migrated_v2';
 
+const SUBMITTED_RETENTION_DAYS = 7;
+const SUBMITTED_MAX_COUNT = 50;
+
 const WORK_TYPE_ORDER = ['ROAD', 'STRUCTURE', 'DRAIN', 'ANCILLARY', 'MISC'];
 const LAYER_CODE_SET = new Set(LAYERS.map((layer) => layer.code));
 const STRUCTURE_ELEMENT_SET = new Set(
@@ -274,22 +277,90 @@ export async function saveRetryQueue(queue) {
 }
 
 // ── Submitted online entries ────────────────────────────────────────────────
-export async function loadSubmittedEntryIds() {
+
+// Items older than SUBMITTED_RETENTION_DAYS are dropped; list capped at SUBMITTED_MAX_COUNT.
+// Items with no submittedAt (migrated from old plain-string format) are kept indefinitely.
+function applySubmittedRetention(items) {
+  const cutoff = Date.now() - SUBMITTED_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  return items
+    .filter(item => !item.submittedAt || new Date(item.submittedAt).getTime() >= cutoff)
+    .slice(0, SUBMITTED_MAX_COUNT);
+}
+
+// Internal: returns { id, submittedAt }[] with retention applied.
+// Normalizes old plain-string format on read.
+async function loadSubmittedEntries() {
   try {
     const raw = await getRaw(SUBMITTED_ENTRY_IDS_KEY);
-    const ids = raw ? JSON.parse(raw) : [];
-    return Array.isArray(ids) ? ids.map((id) => String(id)) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    const normalized = parsed.map(item =>
+      typeof item === 'string' ? { id: item, submittedAt: new Date().toISOString() } : item
+    );
+    return applySubmittedRetention(normalized);
   } catch {
     return [];
   }
 }
 
+// Public: returns string[] for backward compat with callers that check membership.
+export async function loadSubmittedEntryIds() {
+  const entries = await loadSubmittedEntries();
+  return entries.map(e => e.id);
+}
+
 export async function addSubmittedEntryId(entryId) {
   if (!entryId) return [];
-
   const normalizedId = String(entryId);
-  const currentIds = await loadSubmittedEntryIds();
-  const nextIds = [normalizedId, ...currentIds.filter((id) => id !== normalizedId)].slice(0, 100);
-  await setRaw(SUBMITTED_ENTRY_IDS_KEY, JSON.stringify(nextIds));
-  return nextIds;
+  const current = await loadSubmittedEntries();
+  const deduped = [
+    { id: normalizedId, submittedAt: new Date().toISOString() },
+    ...current.filter(e => e.id !== normalizedId),
+  ];
+  const retained = applySubmittedRetention(deduped);
+  await setRaw(SUBMITTED_ENTRY_IDS_KEY, JSON.stringify(retained));
+  return retained.map(e => e.id);
+}
+
+// Applies retention to stored submitted IDs without requiring a new submission.
+// Call on app focus to silently clean up expired entries.
+export async function purgeSubmittedEntries() {
+  try {
+    const entries = await loadSubmittedEntries();
+    await setRaw(SUBMITTED_ENTRY_IDS_KEY, JSON.stringify(entries));
+  } catch (e) {
+    console.warn('[offlineQueue] purgeSubmittedEntries failed:', e.message);
+  }
+}
+
+// Returns stats for the storage panel UI in EntriesScreen.
+export async function getQueueStats() {
+  const [queue, submittedEntries] = await Promise.all([
+    loadQueue(),
+    loadSubmittedEntries(),
+  ]);
+
+  const pending = queue.filter(i => i.syncStatus === 'pending').length;
+  const failed = queue.filter(i => i.syncStatus === 'failed').length;
+
+  let storageSizeKB = 0;
+  try {
+    const [queueRaw, submittedRaw] = await Promise.all([
+      getRaw(QUEUE_KEY),
+      getRaw(SUBMITTED_ENTRY_IDS_KEY),
+    ]);
+    const totalBytes = (queueRaw?.length ?? 0) + (submittedRaw?.length ?? 0);
+    storageSizeKB = Math.round(totalBytes / 1024 * 10) / 10;
+  } catch {
+    storageSizeKB = 0;
+  }
+
+  return {
+    pending,
+    failed,
+    submittedCount: submittedEntries.length,
+    totalOffline: queue.length,
+    storageSizeKB,
+    retentionDays: SUBMITTED_RETENTION_DAYS,
+  };
 }

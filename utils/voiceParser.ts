@@ -129,45 +129,72 @@ export const ACTIVITY_CONFIG: Record<string, { unit: string; materials: string[]
 };
 
 const ACTIVITY_KEYWORDS: [string, string][] = [
+  // Multi-word phrases first (longest match)
   ['prime coat', 'PRIME_COAT'],
   ['tack coat', 'TACK_COAT'],
+  ['earth work', 'EARTHWORK'],
+  ['embankment filling', 'EMBANKMENT'],
+  ['embankment compaction', 'EMBANKMENT'],
+  ['ctsb laying', 'CTSB'],
+  ['ctb laying', 'CTB'],
+  // Structure
   ['rebar', 'REINF'],
   ['reinforcement', 'REINF'],
-  ['steel', 'REINF'],
   ['formwork', 'SHUTTER'],
   ['shuttering', 'SHUTTER'],
   ['excavation', 'EXCAVATION'],
-  ['earthwork', 'EARTHWORK'],
-  ['earth work', 'EARTHWORK'],
   ['installation', 'INSTALLATION'],
   ['erection', 'ERECTION'],
+  ['casting', 'CASTING'],
   ['rcc', 'RCC'],
   ['pcc', 'PCC'],
+  // Road — single word
+  ['earthwork', 'EARTHWORK'],
+  ['embankment', 'EMBANKMENT'],
+  ['filling', 'EARTHWORK'],
+  ['compaction', 'COMPACTION'],
+  ['compacting', 'COMPACTION'],
+  ['spreading', 'SPREADING'],
   ['sdbc', 'SDBC'],
+  ['ctsb', 'CTSB'],
+  ['ctb', 'CTB'],
   ['dbm', 'DBM'],
   ['wmm', 'WMM'],
   ['gsb', 'GSB'],
   ['bc', 'BC'],
+  // Other
   ['drain', 'DRAIN'],
   ['kerb', 'KERB'],
+  // steel last — too generic, only match after others fail
+  ['steel', 'REINF'],
 ];
 
 const WORK_TYPE_KEYWORDS: Record<string, string[]> = {
-  Road: ['dbm', 'bc', 'sdbc', 'wmm', 'gsb', 'earthwork', 'earth work', 'prime coat', 'tack coat'],
-  Structure: ['pier', 'footing', 'foundation', 'girder', 'deck', 'abutment', 'bearing'],
+  Road: [
+    'dbm', 'bc', 'sdbc', 'wmm', 'gsb', 'ctsb', 'ctb',
+    'earthwork', 'earth work', 'embankment', 'filling', 'compaction',
+    'prime coat', 'tack coat', 'subgrade', 'spreading', 'rolling',
+  ],
+  Structure: ['pier', 'footing', 'foundation', 'girder', 'deck', 'abutment', 'bearing', 'rcc', 'pcc'],
   Drain: ['drain'],
   Ancillary: ['kerb', 'road marking', 'guard rail'],
 };
 
+// Returns layer_code directly so mapParsedLayerToCode works without translation
 const LAYER_MAP: Record<string, string> = {
-  EARTHWORK: 'Subgrade',
-  GSB: 'GSB',
-  WMM: 'Base Course',
-  DBM: 'Binder Course',
-  BC: 'Wearing Course',
-  SDBC: 'Wearing Course',
-  PRIME_COAT: 'Prime Coat',
-  TACK_COAT: 'Tack Coat',
+  EARTHWORK: 'SUBGRADE',
+  EMBANKMENT: 'EMBANKMENT',   // "embankment filling" → EMBANKMENT layer
+  COMPACTION: 'SUBGRADE',
+  SPREADING: 'CTSB',          // default spreading = CTSB context; overridden by stage fallback
+  GSB_LAY: 'GSB',  GSB: 'GSB',
+  WMM_LAY: 'WMM',  WMM: 'WMM',
+  DLC: 'CTB',       CTB: 'CTB',
+  CTSB: 'CTSB',
+  DBM: 'BINDER',
+  BC: 'WEARING',    SDBC: 'WEARING',
+  PRIME_COAT: 'PRIME',  TACK_COAT: 'TACK',
+  SHOULDER_PREP: 'SHOULDER',  MEDIAN_WORK: 'MEDIAN',
+  CASTING: '',  RCC: '', PCC: '',  // structure — no road layer
 };
 
 const ELEMENT_MAP: [string, string][] = [

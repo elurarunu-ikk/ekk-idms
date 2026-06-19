@@ -16,22 +16,18 @@ import { logout } from '../services/auth';
 import api, { getApiErrorMessage, API_BASE } from '../services/api';
 import { getSelectedProject, getSttLang, STT_LANGUAGES } from '../services/session';
 import {
-  WORK_TYPES,
-  LAYERS,
-  ELEMENTS,
-  STRUCTURE_TYPES,
-  ROAD_SIDES,
+  loadMasters,
   getActivitiesForWorkType,
   getRoadActivitiesForLayer,
   getStructureElementsForType,
   getStructureActivitiesForSelection,
   deriveStageFromSelection,
-} from '../constants/data';
+  FALLBACK_MATERIALS,
+  FALLBACK_EQUIPMENT,
+  FALLBACK_MANPOWER,
+} from '../services/masters';
+import { ROAD_SIDES } from '../constants/data';
 
-const MACHINE_CODES = [
-  'ROLLER', 'PAVER', 'COMPACTOR', 'EXCAVATOR', 'TIPPER',
-  'GRADER', 'TRANSIT_MIXER', 'CONCRETE_PUMP', 'CRANE', 'LOADER', 'OTHER',
-];
 const MATERIAL_UNITS = ['CUM', 'MT', 'KG', 'BAG', 'NOS', 'LM', 'LTR', 'SQM', 'TON'];
 const SHIFT_TYPES = ['DAY', 'NIGHT'];
 
@@ -87,19 +83,18 @@ function getPhotoGpsPreview(photo) {
 }
 
 function getActivityDefinition(activityCode) {
-  return ['ROAD', 'STRUCTURE', 'DRAIN', 'ANCILLARY', 'MISC']
-    .flatMap((workType) => getActivitiesForWorkType(workType))
-    .find((activity) => activity.code === activityCode);
+  return (masters?.activities ?? []).find(a => a.code === activityCode);
 }
 
 function deriveWorkTypeFromSelection(activityCode, stageCode) {
-  if (LAYERS.some((layer) => layer.code === stageCode)) return 'ROAD';
-  if (ELEMENTS.some((element) => element.code === stageCode)) return 'STRUCTURE';
+  if ((masters?.layers ?? []).some(l => l.code === stageCode)) return 'ROAD';
+  if ((masters?.elements ?? []).some(e => e.code === stageCode)) return 'STRUCTURE';
   if (['DRAIN', 'ANCILLARY', 'MISC'].includes(stageCode)) return stageCode;
 
   const activity = getActivityDefinition(activityCode);
-  if (activity?.workTypes?.length === 1) return activity.workTypes[0];
-  if (activity?.workTypes?.includes('DRAIN')) return 'DRAIN';
+  const wt = activity?.work_types || activity?.workTypes || [];
+  if (wt.length === 1) return wt[0];
+  if (wt.includes('DRAIN')) return 'DRAIN';
   return '';
 }
 
@@ -123,40 +118,58 @@ function toNumberOrNull(val) {
 
 function mapParsedActivityToCaptureActivity(activity) {
   const map = {
-    WMM: 'WMM_LAY',
-    GSB: 'GSB_LAY',
+    // Road layers spoken as activity
+    WMM: 'WMM_LAY',     GSB: 'GSB_LAY',
+    CTSB: 'SPREADING',  CTB: 'DLC',
+    DBM: 'DBM',         BC: 'BC',         SDBC: 'SDBC',
+    PRIME_COAT: 'PRIME_COAT',             TACK_COAT: 'TACK_COAT',
+    // Earthwork variants
     EARTHWORK: 'EARTHWORK',
-    DBM: 'DBM',
-    BC: 'BC',
-    SDBC: 'SDBC',
-    PRIME_COAT: 'PRIME_COAT',
-    TACK_COAT: 'TACK_COAT',
-    RCC: 'RCC',
-    PCC: 'PCC',
-    EXCAVATION: 'EXCAVATION',
-    REINF: 'REINF',
-    SHUTTER: 'SHUTTER',
-    ERECTION: 'ERECTION',
-    INSTALLATION: 'INSTALLATION',
-    DRAIN: 'DRAIN',
-    KERB: 'KERB',
-    MISC: 'MISC',
+    EMBANKMENT: 'EARTHWORK',   FILLING: 'EARTHWORK',
+    COMPACTION: 'COMPACTION',
+    SPREADING: 'SPREADING',    ROLLING: 'ROLLING',
+    // Structure
+    RCC: 'RCC', PCC: 'PCC', EXCAVATION: 'EXCAVATION',
+    REINF: 'REINF', SHUTTER: 'SHUTTER',
+    ERECTION: 'ERECTION', INSTALLATION: 'INSTALLATION',
+    CASTING: 'CASTING',
+    // Other
+    DRAIN: 'DRAIN', KERB: 'KERB', MISC: 'MISC',
   };
   return map[String(activity || '').toUpperCase()] || '';
 }
 
 function mapParsedLayerToCode(layer) {
   const map = {
-    SUBGRADE: 'SUBGRADE',
-    GSB: 'GSB',
-    WMM: 'WMM',
+    // Direct codes (passthrough — voiceParser now returns codes)
+    'WEARING': 'WEARING',
+    'BINDER': 'BINDER',
+    'BASE': 'BASE',
+    'PRIME': 'PRIME',
+    'TACK': 'TACK',
+    'WMM': 'WMM',
+    'GSB': 'GSB',
+    'CTSB': 'CTSB',
+    'CTB': 'CTB',
+    'SUBGRADE': 'SUBGRADE',
+    'EMBANKMENT': 'EMBANKMENT',
+    'SHOULDER': 'SHOULDER',
+    'MEDIAN': 'MEDIAN',
+    // Abbreviations engineers say out loud
+    'BC': 'WEARING',
+    'DBM': 'BINDER',
+    'SDBC': 'WEARING',
+    'EMB': 'EMBANKMENT',
+    // Full label forms (from GPT responses)
     'BASE COURSE': 'BASE',
     'BINDER COURSE': 'BINDER',
+    'BINDER COURSE (DBM)': 'BINDER',
     'WEARING COURSE': 'WEARING',
+    'WEARING COURSE (BC)': 'WEARING',
     'PRIME COAT': 'PRIME',
     'TACK COAT': 'TACK',
   };
-  return map[String(layer || '').toUpperCase()] || '';
+  return map[String(layer || '').trim().toUpperCase()] || '';
 }
 
 function mapParsedProgressStatus(status) {
@@ -247,21 +260,27 @@ export default function CaptureScreen() {
   const [waypoints,  setWaypoints]  = useState([]);
   const [lastSaved,  setLastSaved]  = useState(null);
 
+  const [masters,        setMasters]        = useState(null);
+  const [mastersLoading, setMastersLoading] = useState(true);
+
   // ── 3M Resources ──────────────────────────────────────────────────────────
   const [sttLang,         setSttLangState]     = useState('en-IN');
   const [show3M,          setShow3M]          = useState(false);
   const [materialsUsed,   setMaterialsUsed]   = useState([]);
   const [machinesDeployed,setMachinesDeployed] = useState([]);
   const [manpowerDeployed,setManpowerDeployed] = useState([]);
-  const [mpCategories,    setMpCategories]    = useState([]);
 
-  const [addingMat,    setAddingMat]    = useState(false);
-  const [addingMach,   setAddingMach]   = useState(false);
-  const [addingMp,     setAddingMp]     = useState(false);
+  const [addingMat,  setAddingMat]  = useState(false);
+  const [addingMach, setAddingMach] = useState(false);
+  const [addingMp,   setAddingMp]   = useState(false);
 
-  const [newMat,  setNewMat]  = useState({ code: '', qty: '', unit: 'CUM', source: '' });
-  const [newMach, setNewMach] = useState({ code: 'ROLLER', hours: '', operator: '' });
-  const [newMp,   setNewMp]   = useState({ category: 'SKILLED', count: '', shift: 'DAY' });
+  const [newMat,  setNewMat]  = useState({ code: '', qty: '', unit: '', source: '' });
+  const [newMach, setNewMach] = useState({ code: '', count: '', hours: '' });
+  const [newMp,   setNewMp]   = useState({ category: '', count: '', shift: '' });
+
+  const [matErr,  setMatErr]  = useState(false);
+  const [machErr, setMachErr] = useState(false);
+  const [mpErr,   setMpErr]   = useState(false);
 
   const {
     photos, video, files, uploading,
@@ -275,7 +294,9 @@ export default function CaptureScreen() {
   const showLayerSelector = form.work_type === 'ROAD';
   const showStructureTypeSelector = form.work_type === 'STRUCTURE';
   const showElementSelector = form.work_type === 'STRUCTURE';
-  const availableElements = showElementSelector ? getStructureElementsForType(form.structure_type) : ELEMENTS;
+  const availableElements = showElementSelector
+    ? getStructureElementsForType(masters, form.structure_type)
+    : (masters?.elements ?? []);
   const canChooseActivity = Boolean(
     form.work_type &&
     (!showStructureTypeSelector || form.structure_type) &&
@@ -283,10 +304,10 @@ export default function CaptureScreen() {
     (!showElementSelector || form.element_code)
   );
   const availableActivities = showLayerSelector
-    ? getRoadActivitiesForLayer(form.layer_code)
+    ? getRoadActivitiesForLayer(masters, form.layer_code)
     : showElementSelector
-      ? getStructureActivitiesForSelection(form.structure_type, form.element_code)
-      : getActivitiesForWorkType(form.work_type);
+      ? getStructureActivitiesForSelection(masters, form.structure_type, form.element_code)
+      : getActivitiesForWorkType(masters, form.work_type);
 
   const syncSelectedProject = useCallback(async () => {
     const project = await getSelectedProject();
@@ -300,16 +321,29 @@ export default function CaptureScreen() {
     void syncSelectedProject();
   }, [syncSelectedProject]);
 
-  useEffect(() => {
-    api.get('/api/resources/manpower-categories')
-      .then(r => setMpCategories(r.data || []))
-      .catch(() => {});
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       void syncSelectedProject();
     }, [syncSelectedProject])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      const load = async () => {
+        setMastersLoading(true);
+        try {
+          const data = await loadMasters();
+          if (active) setMasters(data);
+        } catch (e) {
+          console.warn('[CaptureScreen] masters load failed:', e.message);
+        } finally {
+          if (active) setMastersLoading(false);
+        }
+      };
+      load();
+      return () => { active = false; };
+    }, [])
   );
 
   // Auto-calculate quantity and length for manual UX.
@@ -495,12 +529,14 @@ export default function CaptureScreen() {
     const parsedWorkType = mapWorkTypeLabelToCode(parsed.work_type) || deriveWorkTypeFromSelection(parsedActivity || parsed.activity_code, parsed.stage);
     const stageValue = String(parsed.stage || '').toUpperCase();
     const mappedLayer = mapParsedLayerToCode(parsed.layer);
+    const layers  = masters?.layers   ?? [];
+    const elements = masters?.elements ?? [];
     const layerCode = parsedWorkType === 'ROAD'
-      ? (mappedLayer || (LAYERS.some((layer) => layer.code === stageValue) ? stageValue : ''))
+      ? (mappedLayer || (layers.some(l => l.code === stageValue) ? stageValue : ''))
       : '';
     const parsedElement = String(parsed.element || '').toUpperCase();
     const elementCode = parsedWorkType === 'STRUCTURE'
-      ? (ELEMENTS.some((element) => element.code === parsedElement) ? parsedElement : (ELEMENTS.some((element) => element.code === stageValue) ? stageValue : ''))
+      ? (elements.some(e => e.code === parsedElement) ? parsedElement : (elements.some(e => e.code === stageValue) ? stageValue : ''))
       : '';
 
     const fromKm = parsed.chainage_from_km !== '' ? String(parsed.chainage_from_km) : '';
@@ -557,7 +593,7 @@ export default function CaptureScreen() {
         const existingCodes = new Set(prev.map(m => m.code));
         const newItems = parsed.machines_deployed
           .filter(m => m.code && !existingCodes.has(m.code))
-          .map(m => ({ code: m.code, hours: String(m.hours ?? ''), operator: m.operator || '' }));
+          .map(m => ({ code: m.code, count: String(m.count ?? '1'), hours: String(m.hours ?? '') }));
         return newItems.length ? [...prev, ...newItems] : prev;
       });
       setShow3M(true);
@@ -780,7 +816,7 @@ export default function CaptureScreen() {
         ? {
             ...payload,
             materials_used:    materialsUsed.map(m => ({ material_code: m.code, quantity: Number(m.qty), unit: m.unit, source: m.source || null })),
-            machines_deployed: machinesDeployed.map(m => ({ machine_code: m.code, hours: Number(m.hours), operator_name: m.operator || null })),
+            machines_deployed: machinesDeployed.filter(m => m.code && m.count).map(m => ({ machine_code: m.code, count: Number(m.count), hours: m.hours ? Number(m.hours) : null, operator_name: null })),
             manpower_deployed: manpowerDeployed.map(m => ({ category: m.category, count: Number(m.count), shift_type: m.shift })),
           }
         : payload;
@@ -841,7 +877,19 @@ export default function CaptureScreen() {
         setLoading(true);
         // ── Offline path ──────────────────────────────────────────────────────
         const mediaItems = [...photos, ...(video ? [video] : []), ...files];
-        const localId = await enqueueEntry(payload, mediaItems);
+        const offlinePayload = {
+          ...payload,
+          materials_used: materialsUsed.map(m => ({
+            material_code: m.code, quantity: Number(m.qty), unit: m.unit, source: m.source || null
+          })),
+          machines_deployed: machinesDeployed.filter(m => m.code && m.count).map(m => ({
+            machine_code: m.code, count: Number(m.count), hours: m.hours ? Number(m.hours) : null, operator_name: null,
+          })),
+          manpower_deployed: manpowerDeployed.map(m => ({
+            category: m.category, count: Number(m.count), shift_type: m.shift
+          })),
+        };
+        const localId = await enqueueEntry(offlinePayload, mediaItems);
         setLastSaved({
           activity_code: payload.activity_code,
           work_type: payload.work_type,
@@ -896,6 +944,7 @@ export default function CaptureScreen() {
     setParsedFlags({ is_partial_entry: false, missing_fields: [] });
     setMaterialsUsed([]); setMachinesDeployed([]); setManpowerDeployed([]);
     setAddingMat(false); setAddingMach(false); setAddingMp(false);
+    setMatErr(false); setMachErr(false); setMpErr(false);
     resetMedia();
   }
 
@@ -1192,23 +1241,30 @@ export default function CaptureScreen() {
       </View>
 
       <Text style={styles.label}>Work Type</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-        {WORK_TYPES.map((workType) => (
-          <TouchableOpacity
-            key={workType.code}
-            style={[styles.pill, form.work_type === workType.code && styles.pillActive]}
-            onPress={() => updateWorkType(workType.code)}
-          >
-            <Text style={[styles.pillText, form.work_type === workType.code && styles.pillTextActive]}>{workType.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {mastersLoading ? (
+        <View style={styles.loadingPill}>
+          <ActivityIndicator size="small" color="#6366f1" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+          {(masters?.workTypes ?? []).map((workType) => (
+            <TouchableOpacity
+              key={workType.code}
+              style={[styles.pill, form.work_type === workType.code && styles.pillActive]}
+              onPress={() => updateWorkType(workType.code)}
+            >
+              <Text style={[styles.pillText, form.work_type === workType.code && styles.pillTextActive]}>{workType.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {showLayerSelector && (
         <>
           <Text style={styles.label}>Layer</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-            {LAYERS.map((layer) => (
+            {(masters?.layers ?? []).filter(l => !l.work_type_code || l.work_type_code === 'ROAD').map((layer) => (
               <TouchableOpacity
                 key={layer.code}
                 style={[styles.pill, form.layer_code === layer.code && styles.pillActive]}
@@ -1225,7 +1281,7 @@ export default function CaptureScreen() {
         <>
           <Text style={styles.label}>Structure Type</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
-            {STRUCTURE_TYPES.map((type) => (
+            {(masters?.structureTypes ?? []).map((type) => (
               <TouchableOpacity
                 key={type.code}
                 style={[styles.pill, form.structure_type === type.code && styles.pillActive]}
@@ -1468,18 +1524,30 @@ export default function CaptureScreen() {
           ))}
           {addingMat ? (
             <View style={styles.inlineForm}>
-              <TextInput
-                style={styles.inlineInput}
-                placeholder="Material code (WMM / GSB / CEMENT…)"
-                placeholderTextColor="#c7c2c2"
-                value={newMat.code}
-                onChangeText={v => setNewMat(p => ({ ...p, code: v.toUpperCase() }))}
-                autoCapitalize="characters"
-              />
+              <Text style={[styles.inlineLabel, matErr && !newMat.code && styles.inlineLabelError]}>
+                Material{matErr && !newMat.code ? ' *' : ''}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={[{ marginBottom: 8 }, matErr && !newMat.code && styles.inlinePillError]}
+              >
+                {(masters?.materials ?? FALLBACK_MATERIALS).map(m => (
+                  <TouchableOpacity
+                    key={m.code}
+                    style={[styles.miniPill, newMat.code === m.code && styles.miniPillActive]}
+                    onPress={() => setNewMat(p => ({ ...p, code: m.code, unit: p.unit || m.default_unit || '' }))}
+                  >
+                    <Text style={[styles.miniPillText, newMat.code === m.code && styles.miniPillTextActive]}>
+                      {m.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
               <View style={styles.twoColInline}>
                 <TextInput
-                  style={[styles.inlineInput, { flex: 1 }]}
-                  placeholder="Quantity"
+                  style={[styles.inlineInput, { flex: 1 }, matErr && !newMat.qty && styles.inlineInputError]}
+                  placeholder="Quantity *"
                   placeholderTextColor="#c7c2c2"
                   value={newMat.qty}
                   onChangeText={v => setNewMat(p => ({ ...p, qty: v }))}
@@ -1506,14 +1574,15 @@ export default function CaptureScreen() {
               />
               <View style={styles.inlineActions}>
                 <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
-                  if (!newMat.code || !newMat.qty) return;
+                  if (!newMat.code || !newMat.qty) { setMatErr(true); return; }
                   setMaterialsUsed(p => [...p, newMat]);
-                  setNewMat({ code: '', qty: '', unit: 'CUM', source: '' });
+                  setNewMat({ code: '', qty: '', unit: '', source: '' });
+                  setMatErr(false);
                   setAddingMat(false);
                 }}>
                   <Text style={styles.addConfirmText}>Add Material</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddingMat(false)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setAddingMat(false); setMatErr(false); }}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
@@ -1530,7 +1599,7 @@ export default function CaptureScreen() {
             <View key={i} style={styles.resourceCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.resourceCardCode}>{m.code}</Text>
-                <Text style={styles.resourceCardMeta}>{m.hours}h{m.operator ? ` · Op: ${m.operator}` : ''}</Text>
+                <Text style={styles.resourceCardMeta}>{m.count} unit(s) · {m.hours ? `${m.hours}h` : 'hours not set'}</Text>
               </View>
               <TouchableOpacity style={styles.removeBtn} onPress={() => setMachinesDeployed(p => p.filter((_, j) => j !== i))}>
                 <Text style={styles.removeBtnText}>✕</Text>
@@ -1539,43 +1608,51 @@ export default function CaptureScreen() {
           ))}
           {addingMach ? (
             <View style={styles.inlineForm}>
-              <Text style={styles.inlineLabel}>Machine Type</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                {MACHINE_CODES.map(c => (
+              <Text style={[styles.inlineLabel, machErr && !newMach.code && styles.inlineLabelError]}>
+                Machine Type{machErr && !newMach.code ? ' *' : ''}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={[{ marginBottom: 8 }, machErr && !newMach.code && styles.inlinePillError]}
+              >
+                {(masters?.equipment ?? FALLBACK_EQUIPMENT).map(e => (
                   <TouchableOpacity
-                    key={c}
-                    style={[styles.miniPill, newMach.code === c && styles.miniPillActive]}
-                    onPress={() => setNewMach(p => ({ ...p, code: c }))}
+                    key={e.code}
+                    style={[styles.miniPill, newMach.code === e.code && styles.miniPillActive]}
+                    onPress={() => setNewMach(p => ({ ...p, code: e.code }))}
                   >
-                    <Text style={[styles.miniPillText, newMach.code === c && styles.miniPillTextActive]}>{c}</Text>
+                    <Text style={[styles.miniPillText, newMach.code === e.code && styles.miniPillTextActive]}>{e.label}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
               <TextInput
                 style={styles.inlineInput}
-                placeholder="Hours worked (e.g. 8)"
+                placeholder="Number of machines (default: 1)"
+                placeholderTextColor="#c7c2c2"
+                value={newMach.count}
+                onChangeText={v => setNewMach(p => ({ ...p, count: v }))}
+                keyboardType="numeric"
+              />
+              <TextInput
+                style={styles.inlineInput}
+                placeholder="Hours worked (optional)"
                 placeholderTextColor="#c7c2c2"
                 value={newMach.hours}
                 onChangeText={v => setNewMach(p => ({ ...p, hours: v }))}
                 keyboardType="decimal-pad"
               />
-              <TextInput
-                style={styles.inlineInput}
-                placeholder="Operator name (optional)"
-                placeholderTextColor="#c7c2c2"
-                value={newMach.operator}
-                onChangeText={v => setNewMach(p => ({ ...p, operator: v }))}
-              />
               <View style={styles.inlineActions}>
                 <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
-                  if (!newMach.hours) return;
-                  setMachinesDeployed(p => [...p, newMach]);
-                  setNewMach({ code: 'ROLLER', hours: '', operator: '' });
+                  if (!newMach.code) { setMachErr(true); return; }
+                  setMachinesDeployed(p => [...p, { ...newMach, count: newMach.count || '1' }]);
+                  setNewMach({ code: '', count: '', hours: '' });
+                  setMachErr(false);
                   setAddingMach(false);
                 }}>
                   <Text style={styles.addConfirmText}>Add Machine</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddingMach(false)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setAddingMach(false); setMachErr(false); }}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
@@ -1601,21 +1678,27 @@ export default function CaptureScreen() {
           ))}
           {addingMp ? (
             <View style={styles.inlineForm}>
-              <Text style={styles.inlineLabel}>Category</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                {(mpCategories.length ? mpCategories : [{ category_code: 'SKILLED' }, { category_code: 'UNSKILLED' }, { category_code: 'MASON' }]).map(c => (
+              <Text style={[styles.inlineLabel, mpErr && !newMp.category && styles.inlineLabelError]}>
+                Category{mpErr && !newMp.category ? ' *' : ''}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={[{ marginBottom: 8 }, mpErr && !newMp.category && styles.inlinePillError]}
+              >
+                {(masters?.manpowerCategories ?? FALLBACK_MANPOWER).map(c => (
                   <TouchableOpacity
-                    key={c.category_code}
-                    style={[styles.miniPill, newMp.category === c.category_code && styles.miniPillActive]}
-                    onPress={() => setNewMp(p => ({ ...p, category: c.category_code }))}
+                    key={c.code}
+                    style={[styles.miniPill, newMp.category === c.code && styles.miniPillActive]}
+                    onPress={() => setNewMp(p => ({ ...p, category: c.code }))}
                   >
-                    <Text style={[styles.miniPillText, newMp.category === c.category_code && styles.miniPillTextActive]}>{c.category_code}</Text>
+                    <Text style={[styles.miniPillText, newMp.category === c.code && styles.miniPillTextActive]}>{c.label}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
               <TextInput
                 style={styles.inlineInput}
-                placeholder="Number of workers"
+                placeholder="Number of workers (default: 1)"
                 placeholderTextColor="#c7c2c2"
                 value={newMp.count}
                 onChangeText={v => setNewMp(p => ({ ...p, count: v }))}
@@ -1635,14 +1718,15 @@ export default function CaptureScreen() {
               </View>
               <View style={styles.inlineActions}>
                 <TouchableOpacity style={styles.addConfirmBtn} onPress={() => {
-                  if (!newMp.count) return;
-                  setManpowerDeployed(p => [...p, newMp]);
-                  setNewMp({ category: 'SKILLED', count: '', shift: 'DAY' });
+                  if (!newMp.category) { setMpErr(true); return; }
+                  setManpowerDeployed(p => [...p, { ...newMp, count: newMp.count || '1', shift: newMp.shift || 'DAY' }]);
+                  setNewMp({ category: '', count: '', shift: '' });
+                  setMpErr(false);
                   setAddingMp(false);
                 }}>
                   <Text style={styles.addConfirmText}>Add Manpower</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddingMp(false)}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setAddingMp(false); setMpErr(false); }}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
@@ -1814,6 +1898,11 @@ const styles = StyleSheet.create({
   cancelBtnText:    { color: '#555', fontSize: 13, fontWeight: '600' },
   addResourceBtn:   { borderStyle: 'dashed', borderWidth: 1, borderColor: '#bbb', borderRadius: 8, padding: 10, alignItems: 'center', marginBottom: 4 },
   addResourceBtnText:{ color: '#555', fontSize: 13, fontWeight: '600' },
+  inlineInputError:  { borderColor: '#ef4444', borderWidth: 2 },
+  inlinePillError:   { borderWidth: 1, borderColor: '#ef4444', borderRadius: 8 },
+  inlineLabelError:  { color: '#ef4444' },
   logoutBtn:        { padding: 12, borderRadius: 8, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center', marginLeft: 12 },
   logoutText:       { fontSize: 18 },
+  loadingPill:      { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 16 },
+  loadingText:      { fontSize: 13, color: '#6b7280' },
 });

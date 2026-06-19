@@ -1,7 +1,38 @@
+import { Platform } from 'react-native';
 import api from './api';
 import { clearSession, getStoredSession, saveSession } from './session';
 
 const isWeb = typeof localStorage !== 'undefined';
+
+// True only on a real native device — Expo web runs in a browser (Platform.OS === 'web')
+const isNative = Platform.OS !== 'web';
+
+// ── Stable device ID (generated once, persisted forever) ──────────────────
+async function getOrCreateDeviceId() {
+  const KEY = 'ekk_device_id';
+  let id = isWeb ? localStorage.getItem(KEY) : null;
+  if (!id) {
+    try {
+      const SecureStore = await import('expo-secure-store');
+      id = await SecureStore.getItemAsync(KEY);
+    } catch (_) {}
+  }
+  if (!id) {
+    id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    });
+    if (isWeb) {
+      localStorage.setItem(KEY, id);
+    } else {
+      try {
+        const SecureStore = await import('expo-secure-store');
+        await SecureStore.setItemAsync(KEY, id);
+      } catch (_) {}
+    }
+  }
+  return id;
+}
 
 // ── Storage helpers ────────────────────────────────────────────────────────
 async function secureSet(key, value) {
@@ -114,11 +145,16 @@ async function cacheCredentials(email, password, token) {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 export async function login(email, password) {
-  const resp = await api.post(
-    '/auth/login',
-    { email, password },
-    { headers: { 'Content-Type': 'application/json' } }
-  );
+  const body = { email, password };
+  if (isNative) {
+    body.platform  = 'mobile';
+    body.device_id = await getOrCreateDeviceId();
+  } else {
+    body.platform = 'web';
+  }
+  const resp = await api.post('/auth/login', body, {
+    headers: { 'Content-Type': 'application/json' },
+  });
   await cacheCredentials(email, password, resp.data.access_token);
   await saveSession(resp.data.session);
   return resp.data;
@@ -157,6 +193,7 @@ export async function tryOfflineLogin(email, password) {
 }
 
 export async function logout() {
+  try { await api.post('/auth/logout'); } catch (_) {}
   await secureDel('ekk_token');
   await clearSession();
 }
