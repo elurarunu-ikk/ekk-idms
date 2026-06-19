@@ -117,6 +117,24 @@ async def verify_super_admin():
 def health():
     return {"status": "ok", "service": "EKK IDMS API", "version": "1.0.0"}
 
+@app.get("/app/version", tags=["System"])
+def app_version():
+    """
+    Returns minimum required app version and download URL.
+    Called by mobile app on launch to enforce mandatory updates.
+    Update minimum_version and force_update when a new APK is released.
+    """
+    return {
+        "minimum_version": "0.3.0",
+        "latest_version": "0.3.0",
+        "force_update": True,
+        "message": (
+            "A new version of EKK IDMS is available.\n\n"
+            "Please download and install v0.3.0 to continue using the app."
+        ),
+        "download_url": "https://idms.ikkuips.co.in/downloads/ekk-idms-v0.3.0.apk",
+    }
+
 @app.get("/", tags=["System"])
 def root():
     return {"service": "EKK IDMS API", "docs": "/docs"}

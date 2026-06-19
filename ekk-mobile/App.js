@@ -1,16 +1,28 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { Text, Alert, Linking, AppState } from 'react-native';
+import Constants from 'expo-constants';
 import LoginScreen from './screens/LoginScreen';
 import CaptureScreen from './screens/CaptureScreen';
 import EntriesScreen from './screens/EntriesScreen';
 import ApprovalScreen from './screens/ApprovalScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import authEvents from './utils/authEvents';
+import { API_BASE } from './services/api';
 
 export const navigationRef = createNavigationContainerRef();
+
+function isVersionBehind(installed, minimum) {
+  const a = installed.split('.').map(Number);
+  const b = minimum.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) < (b[i] || 0)) return true;
+    if ((a[i] || 0) > (b[i] || 0)) return false;
+  }
+  return false;
+}
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -43,6 +55,60 @@ function TabNavigator() {
  }
 
 export default function App() {
+  const [versionChecked, setVersionChecked] = useState(false);
+  const [updateRequired, setUpdateRequired] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/app/version`,
+          { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+        );
+        const data = await res.json();
+        const installedVersion =
+          Constants.expoConfig?.version ||
+          Constants.manifest?.version ||
+          '0.0.0';
+
+        if (data.force_update && isVersionBehind(installedVersion, data.minimum_version)) {
+          setUpdateInfo(data);
+          setUpdateRequired(true);
+          Alert.alert(
+            '⬆️ Update Required',
+            data.message,
+            [{ text: 'Download Update', onPress: () => Linking.openURL(data.download_url) }],
+            { cancelable: false }
+          );
+        }
+      } catch (e) {
+        // Version check failed (offline etc.) — allow app to continue.
+        // Never block the app just because the version endpoint
+        // was unreachable. Field engineers may be offline.
+        console.warn('[version] Check failed, continuing:', e.message);
+      } finally {
+        setVersionChecked(true);
+      }
+    };
+    checkVersion();
+  }, []);
+
+  useEffect(() => {
+    if (!updateRequired || !updateInfo) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        Alert.alert(
+          '⬆️ Update Required',
+          updateInfo.message,
+          [{ text: 'Download Update', onPress: () => Linking.openURL(updateInfo.download_url) }],
+          { cancelable: false }
+        );
+      }
+    });
+    return () => subscription.remove();
+  }, [updateRequired, updateInfo]);
+
   useEffect(() => {
     const handler = () => {
       navigationRef.current?.reset({
