@@ -125,8 +125,8 @@ def app_version():
     Update minimum_version and force_update when a new APK is released.
     """
     return {
-        "minimum_version": "0.3.0",
-        "latest_version": "0.3.0",
+        "minimum_version": "0.3.1",
+        "latest_version": "0.3.1",
         "force_update": True,
         "message": (
             "A new version of EKK IDMS is available.\n\n"
