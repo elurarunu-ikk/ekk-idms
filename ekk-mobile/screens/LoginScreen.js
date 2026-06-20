@@ -16,6 +16,7 @@ function showAlert(title, message) {
 import NetInfo from '@react-native-community/netinfo';
 import { login, tryOfflineLogin } from '../services/auth';
 import { getApiErrorMessage, API_BASE } from '../services/api';
+import Constants from 'expo-constants';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail]         = useState('admin@ekk.in');
@@ -115,8 +116,10 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.offlineHint}>Uses last saved credentials from this device</Text>
         )}
 
-        <Text style={styles.version}>v1.0 · EKK Infrastructure</Text>
-        <Text style={styles.apiHint}>API: {API_BASE}</Text>
+        <Text style={styles.version}>
+          v{Constants.expoConfig?.version || '0.3.1'} · EKK Infrastructure
+        </Text>
+        {__DEV__ && <Text style={styles.apiHint}>API: {API_BASE}</Text>}
       </View>
     </KeyboardAvoidingView>
   );
