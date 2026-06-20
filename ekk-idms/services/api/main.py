@@ -130,9 +130,9 @@ def app_version():
         "force_update": True,
         "message": (
             "A new version of EKK IDMS is available.\n\n"
-            "Please download and install v0.3.0 to continue using the app."
+            "Please download and install v0.3.1 to continue using the app."
         ),
-        "download_url": "https://idms.ikkuips.co.in/downloads/ekk-idms-v0.3.0.apk",
+        "download_url": "https://idms.ikkuips.co.in/downloads/ekk-idms-v0.3.1.apk",
     }
 
 @app.get("/", tags=["System"])
