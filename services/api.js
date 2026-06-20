@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 import { logout } from './auth';
 import authEvents from '../utils/authEvents';
 
-const PUBLIC_API_BASE = 'https://solely-deposit-evanescence-jessica.trycloudflare.com';
+const PUBLIC_API_BASE = 'https://idms.ikkuips.co.in';
 function hostFromUri(raw) {
   if (!raw || typeof raw !== 'string') return '';
   try {

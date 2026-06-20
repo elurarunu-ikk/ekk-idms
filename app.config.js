@@ -4,7 +4,7 @@ export default {
   expo: {
     name: IS_PREVIEW ? 'ekk-Idms' : 'ekk-mobile',
     slug: 'ekk-mobile',
-    version: '0.2.0',
+    version: '0.3.1',
     sdkVersion: '54.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
