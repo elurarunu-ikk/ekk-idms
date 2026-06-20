@@ -77,8 +77,8 @@ const Dashboard = () => {
     <div className="space-y-6">
       {/* Mobile app download banner */}
       <a
-        href="/downloads/ekk-idms-v0.2.0.apk"
-        download="ekk-idms-v0.2.0.apk"
+        href="/downloads/ekk-idms-v0.3.0.apk"
+        download="ekk-idms-v0.3.0.apk"
         className="flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-3 text-white shadow-sm transition hover:from-primary-700 hover:to-primary-800"
       >
         <div className="flex items-center gap-3">
@@ -87,7 +87,7 @@ const Dashboard = () => {
           </svg>
           <div>
             <p className="text-sm font-semibold leading-tight">Download EKK IDMS Mobile App</p>
-            <p className="text-xs text-primary-200">Android APK · v0.2.0</p>
+            <p className="text-xs text-primary-200">Android APK · v0.3.0</p>
           </div>
         </div>
         <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">Download APK</span>
