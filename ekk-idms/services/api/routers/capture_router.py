@@ -272,6 +272,20 @@ def approve_capture(
     entry.rejected = False
     entry.reject_reason = None
 
+    # Update BOQ quantity actuals (non-blocking)
+    try:
+        from routers.boq_router import update_boq_qty_on_approval
+        from models.project import Project
+        project = db.query(Project).filter(Project.id == entry.project_id).first()
+        project_code = project.project_code if project else None
+        if project_code:
+            update_boq_qty_on_approval(db, entry, project_code)
+    except Exception as _boq_exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"BOQ qty update failed for entry {entry.id}: {_boq_exc}"
+        )
+
     db.commit()
     db.refresh(entry)
     return entry

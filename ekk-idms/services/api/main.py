@@ -93,6 +93,9 @@ app.include_router(permission_router, prefix="/api/v1/permissions", tags=["Permi
 from routers.master_data_router import router as master_router
 app.include_router(master_router, prefix="/api/masters", tags=["Master Data"])
 
+from routers.boq_router import router as boq_router
+app.include_router(boq_router, prefix="/api/boq", tags=["BOQ Versioning"])
+
 app.mount("/media", StaticFiles(directory="media_uploads"), name="media")
 
 

@@ -42,6 +42,8 @@ MODULES = [
     "refdata",
     "gradesheet",
     "resources",
+    "boq",
+    "tcs",
 ]
 PRIVILEGED_ROLES = {"SUPER ADMIN", "SUPER_ADMIN"}
 FULL_ACCESS_ROLES = {"SUPER ADMIN", "SUPER_ADMIN"}
