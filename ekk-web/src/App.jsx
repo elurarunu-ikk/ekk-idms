@@ -17,6 +17,9 @@ import GradeSheetImport from './pages/GradeSheetImport';
 import ReferenceDataPage from './pages/ReferenceDataPage';
 import ResourcesPage from './pages/ResourcesPage';
 import MastersPage from './pages/MastersPage';
+import BOQRegister from './pages/BOQRegister';
+import BOQApprovals from './pages/BOQApprovals';
+import BOQMapping from './pages/BOQMapping';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -54,6 +57,9 @@ const App = () => {
         <Route path="users/new" element={<CreateUser />} />
         <Route path="users/:id/access" element={<CreateUser />} />
         <Route path="users/:id" element={<UserDetail />} />
+        <Route path="boq" element={<BOQRegister />} />
+        <Route path="boq/approvals" element={<BOQApprovals />} />
+        <Route path="boq/mapping" element={<BOQMapping />} />
         <Route path="grade-sheet" element={<GradeSheetImport />} />
         <Route path="reference-data" element={<ReferenceDataPage />} />
         <Route path="resources" element={<ResourcesPage />} />

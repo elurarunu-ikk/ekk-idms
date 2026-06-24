@@ -57,14 +57,20 @@ const NAV_ITEMS = [
   { to: '/chat', label: 'AI Assistant', icon: 'chat', permission: 'chat' },
 ];
 
+const PROJECT_DATA_ITEMS = [
+  { to: '/boq',            label: 'BOQ Register',   icon: 'report',     permission: 'boq' },
+  { to: '/boq/mapping',    label: 'BOQ Mapping',    icon: 'report',     permission: 'boq' },
+  { to: '/grade-sheet',    label: 'Grade Sheet',    icon: 'gradesheet', permission: 'gradesheet' },
+  { to: '/reference-data', label: 'Reference Data', icon: 'refdata',    permission: 'refdata' },
+  { to: '/tcs',            label: 'TCS',            icon: 'report',     permission: 'tcs' },
+];
+
 const ADMIN_ITEMS = [
-  { to: '/companies', label: 'Companies', icon: 'companies', permission: 'companies' },
-  { to: '/projects', label: 'Projects', icon: 'projects', permission: 'projects' },
-  { to: '/users', label: 'Users', icon: 'users', permission: 'users' },
-  { to: '/grade-sheet', label: 'Grade Sheet', icon: 'gradesheet', permission: 'gradesheet' },
-  { to: '/reference-data', label: 'Reference Data', icon: 'refdata', permission: 'refdata' },
+  { to: '/companies', label: 'Companies',   icon: 'companies', permission: 'companies' },
+  { to: '/projects',  label: 'Projects',    icon: 'projects',  permission: 'projects' },
+  { to: '/users',     label: 'Users',       icon: 'users',     permission: 'users' },
+  { to: '/masters',   label: 'Masters',     icon: 'masters',   permission: 'masters' },
   { to: '/resources', label: '3M Resources', icon: 'resources', permission: 'resources' },
-  { to: '/masters', label: 'Masters', icon: 'masters', permission: 'masters' },
 ];
 
 const Navbar = () => {
@@ -100,6 +106,7 @@ const Navbar = () => {
         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
     }`;
 
+  const hasProjectDataItems = PROJECT_DATA_ITEMS.some(({ permission }) => hasPermission(permission, 'view'));
   const hasAdminItems = ADMIN_ITEMS.some(({ permission }) => hasPermission(permission, 'view'));
 
   return (
@@ -144,6 +151,9 @@ const Navbar = () => {
 
         {/* Main nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            Field Operations
+          </p>
           <div className="space-y-0.5">
             {NAV_ITEMS.map(({ to, label, icon, permission, badge, end }) =>
               hasPermission(permission, 'view') ? (
@@ -159,6 +169,24 @@ const Navbar = () => {
               ) : null
             )}
           </div>
+
+          {hasProjectDataItems && (
+            <div className="mt-6">
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                Project Data
+              </p>
+              <div className="space-y-0.5">
+                {PROJECT_DATA_ITEMS.map(({ to, label, icon, permission }) =>
+                  hasPermission(permission, 'view') ? (
+                    <NavLink key={to} to={to} className={linkClass}>
+                      <Icon path={ICONS[icon]} />
+                      <span>{label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            </div>
+          )}
 
           {hasAdminItems && (
             <div className="mt-6">
