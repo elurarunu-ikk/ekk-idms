@@ -106,9 +106,12 @@ const CapturePreviewPanel = ({ entry, onClose, onOpenFull, footerActions }) => {
               <p className="text-lg font-bold text-gray-900">{entry.quantity_lm ?? '—'}</p>
             </div>
             <div className="rounded-lg bg-gray-50 p-3">
-              <p className="text-xs text-gray-400 mb-1">L × W × D</p>
+              <p className="text-xs text-gray-400 mb-1">
+                L × W × D{entry.count > 1 ? ' × Count' : ''}
+              </p>
               <p className="text-sm font-medium text-gray-700">
                 {[entry.length_m, entry.width_m, entry.depth_m].map(v => v ?? '—').join(' × ')}
+                {entry.count > 1 ? ` × ${entry.count}` : ''}
               </p>
             </div>
           </div>

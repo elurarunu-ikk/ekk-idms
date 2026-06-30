@@ -230,6 +230,7 @@ def update_capture(
     entry.length_m        = payload.length_m
     entry.width_m         = payload.width_m
     entry.depth_m         = payload.depth_m
+    entry.count           = payload.count if payload.count is not None else 1
     entry.contractor_name = payload.contractor_name
     entry.road_side       = payload.road_side
     entry.rfi_number      = payload.rfi_number
@@ -371,6 +372,7 @@ def _build_base_entry(payload: ManualCaptureRequest, user: "User") -> SiteDataTr
         length_m=payload.length_m,
         width_m=payload.width_m,
         depth_m=payload.depth_m,
+        count=payload.count if payload.count is not None else 1,
         contractor_name=payload.contractor_name,
         road_side=payload.road_side,
         rfi_number=payload.rfi_number,

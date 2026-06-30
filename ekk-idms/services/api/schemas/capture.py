@@ -105,6 +105,7 @@ class ManualCaptureRequest(BaseModel):
     length_m:         Optional[float] = None
     width_m:          Optional[float] = None
     depth_m:          Optional[float] = None
+    count:            Optional[int] = 1
     element:          Optional[str] = None
     layer:            Optional[str] = None
     materials:        Optional[List[str]] = None
@@ -121,6 +122,16 @@ class ManualCaptureRequest(BaseModel):
     weather_code:     Optional[str] = None
     progress_status:  Optional[str] = None
     entry_date:       Optional[datetime] = None
+
+    @field_validator("count", mode="before")
+    @classmethod
+    def positive_entry_count(cls, v: Any) -> int:
+        if v is None:
+            return 1
+        val = int(v)
+        if val < 1:
+            raise ValueError("count must be at least 1")
+        return val
 
 
 # ── Extended 3M request ───────────────────────────────────────────────────────
@@ -202,6 +213,7 @@ class CaptureEntryResponse(BaseModel):
     length_m:         Optional[float] = None
     width_m:          Optional[float] = None
     depth_m:          Optional[float] = None
+    count:            Optional[int] = 1
     cost:             Optional[float] = None
     payment_qualifies: Optional[bool] = None
     approved:         Optional[bool] = None
