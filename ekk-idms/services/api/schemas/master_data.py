@@ -1,6 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List
 import uuid
+
+SCOPED_WORK_TYPES = {"ROAD", "STRUCTURE"}
 
 # ── Base response schemas (read) ─────────────────────────────────────────────
 
@@ -74,6 +76,18 @@ class LayerUpdate(BaseModel):
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 
+def _validate_scoped_exclusivity(v):
+    if v is None:
+        return v
+    scoped_selected = [wt for wt in v if wt.upper() in SCOPED_WORK_TYPES]
+    if len(scoped_selected) > 1:
+        raise ValueError(
+            f"An activity cannot be valid for both Road and Structure simultaneously "
+            f"(they use different scoping mappings — Layers vs Structure Type/Element). "
+            f"Got: {scoped_selected}"
+        )
+    return v
+
 class ActivityCreate(BaseModel):
     code: str
     label: str
@@ -84,6 +98,11 @@ class ActivityCreate(BaseModel):
     structure_type_codes: List[str] = []  # paired positionally with element_codes
     element_codes: List[str] = []
 
+    @field_validator("work_type_codes")
+    @classmethod
+    def validate_scoped_exclusivity(cls, v):
+        return _validate_scoped_exclusivity(v)
+
 class ActivityUpdate(BaseModel):
     label: Optional[str] = None
     default_unit: Optional[str] = None
@@ -93,6 +112,11 @@ class ActivityUpdate(BaseModel):
     layer_codes: Optional[List[str]] = None       # replace all if provided
     structure_type_codes: Optional[List[str]] = None  # replace all if both provided
     element_codes: Optional[List[str]] = None
+
+    @field_validator("work_type_codes")
+    @classmethod
+    def validate_scoped_exclusivity(cls, v):
+        return _validate_scoped_exclusivity(v)
 
 class ElementCreate(BaseModel):
     code: str

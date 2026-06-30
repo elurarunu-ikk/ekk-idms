@@ -14,6 +14,8 @@ import {
   getApiErrorMessage,
 } from '../services/mastersService';
 
+const SCOPED_WTS = ['ROAD', 'STRUCTURE'];
+
 const TABS = ['Work Types', 'Layers', 'Activities', 'Elements', 'Structure Types',
               'Materials', 'Equipment', 'Manpower'];
 
@@ -35,6 +37,8 @@ const MastersPage = () => {
 
   const [filterWorkType, setFilterWorkType] = useState('');
   const [workTypes, setWorkTypes] = useState([]);
+  const [structureTypes, setStructureTypes] = useState([]);
+  const [elements, setElements] = useState([]);
 
   const [form, setForm] = useState({
     code: '', label: '', sort_order: 0,
@@ -43,11 +47,14 @@ const MastersPage = () => {
     category: '',
     work_type_codes: [],
     layer_codes: [],
+    structure_mappings: [],
   });
 
-  // Load work types once for dropdowns
+  // Load reference data once for dropdowns
   useEffect(() => {
     getWorkTypes(true).then(setWorkTypes).catch(() => {});
+    getStructureTypes(true).then(setStructureTypes).catch(() => {});
+    getElements(true).then(setElements).catch(() => {});
   }, []);
 
   const loadItems = async () => {
@@ -86,10 +93,12 @@ const MastersPage = () => {
         category: editItem.category || '',
         work_type_codes: editItem.work_types || [],
         layer_codes: editItem.layers || [],
+        structure_mappings: editItem.structure_mappings || [],
       });
     } else {
       setForm({ code: '', label: '', sort_order: 0, work_type_code: 'ROAD',
-                default_unit: '', category: '', work_type_codes: [], layer_codes: [] });
+                default_unit: '', category: '', work_type_codes: [],
+                layer_codes: [], structure_mappings: [] });
     }
   }, [editItem, modalOpen]);
 
@@ -144,6 +153,8 @@ const MastersPage = () => {
           sort_order: Number(form.sort_order),
           work_type_codes: form.work_type_codes,
           layer_codes: form.layer_codes,
+          structure_type_codes: form.structure_mappings.map(m => m.structure_type),
+          element_codes: form.structure_mappings.map(m => m.element),
         };
         if (isEdit) await updateActivity(editItem.code, payload);
         else await createActivity({ code: form.code.toUpperCase(), ...payload });
@@ -471,40 +482,83 @@ const MastersPage = () => {
                     </select>
                   </div>
 
-                  {/* Work Types multi-checkbox */}
+                  {/* Primary Scope — mutually exclusive radio (Road / Structure / None) */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Work Types <span className="text-xs text-gray-400">(select all that apply)</span>
+                      Primary Scope
+                      <span className="text-xs text-gray-400 ml-1">(determines mapping type — choose one)</span>
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {workTypes.map(wt => (
+                    <div className="flex gap-2">
+                      {['NONE', 'ROAD', 'STRUCTURE'].map(scope => (
                         <label
-                          key={wt.code}
+                          key={scope}
                           className="flex items-center gap-2 rounded-lg border border-gray-200
-                                     px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                                     px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 flex-1"
                         >
                           <input
-                            type="checkbox"
-                            checked={form.work_type_codes.includes(wt.code)}
-                            onChange={e => {
-                              setForm(f => ({
+                            type="radio"
+                            name="primary_scope"
+                            checked={
+                              scope === 'NONE'
+                                ? !form.work_type_codes.includes('ROAD') && !form.work_type_codes.includes('STRUCTURE')
+                                : form.work_type_codes.includes(scope)
+                            }
+                            onChange={() => setForm(f => {
+                              const withoutScoped = f.work_type_codes.filter(
+                                c => !SCOPED_WTS.includes(c)
+                              );
+                              return {
                                 ...f,
-                                work_type_codes: e.target.checked
-                                  ? [...f.work_type_codes, wt.code]
-                                  : f.work_type_codes.filter(c => c !== wt.code),
-                                layer_codes: (!e.target.checked && wt.code === 'ROAD')
-                                  ? [] : f.layer_codes,
-                              }));
-                            }}
-                            className="rounded border-gray-300"
+                                work_type_codes: scope === 'NONE'
+                                  ? withoutScoped
+                                  : [...withoutScoped, scope],
+                                layer_codes: scope === 'ROAD' ? f.layer_codes : [],
+                                structure_mappings: scope === 'STRUCTURE' ? f.structure_mappings : [],
+                              };
+                            })}
+                            className="text-primary-600"
                           />
-                          {wt.label}
+                          {scope === 'NONE' ? 'None' : scope === 'ROAD' ? 'Road' : 'Structure'}
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  {/* Valid Layers — only when ROAD is checked */}
+                  {/* Also Valid For — unscoped work types, coexist with any primary scope */}
+                  {workTypes.filter(wt => !SCOPED_WTS.includes(wt.code)).length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Also Valid For
+                        <span className="text-xs text-gray-400 ml-1">(no additional mapping required)</span>
+                      </label>
+                      <div className="flex gap-2 flex-wrap">
+                        {workTypes
+                          .filter(wt => !SCOPED_WTS.includes(wt.code))
+                          .map(wt => (
+                            <label
+                              key={wt.code}
+                              className="flex items-center gap-2 rounded-lg border border-gray-200
+                                         px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={form.work_type_codes.includes(wt.code)}
+                                onChange={e => setForm(f => ({
+                                  ...f,
+                                  work_type_codes: e.target.checked
+                                    ? [...f.work_type_codes, wt.code]
+                                    : f.work_type_codes.filter(c => c !== wt.code),
+                                }))}
+                                className="rounded border-gray-300"
+                              />
+                              {wt.label}
+                            </label>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Valid Layers — only when ROAD is primary scope */}
                   {form.work_type_codes.includes('ROAD') && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -532,6 +586,73 @@ const MastersPage = () => {
                             <span className="font-mono text-xs">{lc}</span>
                           </label>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Structure Type + Element mappings — only when STRUCTURE is primary scope */}
+                  {form.work_type_codes.includes('STRUCTURE') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Valid Structure Type / Element pairs
+                        <span className="text-xs text-gray-400 ml-1">(add one row per valid combination)</span>
+                      </label>
+                      <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+                        {form.structure_mappings.map((mapping, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <select
+                              value={mapping.structure_type}
+                              onChange={e => setForm(f => {
+                                const updated = [...f.structure_mappings];
+                                updated[idx] = { ...updated[idx], structure_type: e.target.value };
+                                return { ...f, structure_mappings: updated };
+                              })}
+                              className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5
+                                         text-sm focus:border-primary-500 focus:outline-none"
+                            >
+                              <option value="">— Structure Type —</option>
+                              {structureTypes.map(st => (
+                                <option key={st.code} value={st.code}>{st.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={mapping.element}
+                              onChange={e => setForm(f => {
+                                const updated = [...f.structure_mappings];
+                                updated[idx] = { ...updated[idx], element: e.target.value };
+                                return { ...f, structure_mappings: updated };
+                              })}
+                              className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5
+                                         text-sm focus:border-primary-500 focus:outline-none"
+                            >
+                              <option value="">— Element —</option>
+                              {elements.map(el => (
+                                <option key={el.code} value={el.code}>{el.label}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({
+                                ...f,
+                                structure_mappings: f.structure_mappings.filter((_, i) => i !== idx),
+                              }))}
+                              className="p-1 text-red-400 hover:text-red-600 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            structure_mappings: [...f.structure_mappings, { structure_type: '', element: '' }],
+                          }))}
+                          className="flex items-center gap-1 text-xs text-primary-600
+                                     hover:text-primary-800 font-medium mt-1"
+                        >
+                          <Plus className="w-3 h-3" /> Add row
+                        </button>
                       </div>
                     </div>
                   )}
