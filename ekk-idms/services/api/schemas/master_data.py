@@ -32,6 +32,7 @@ class ActivityResponse(BaseModel):
     # Populated by the API endpoint from junction tables:
     work_types: List[str] = []   # list of work_type_codes
     layers: List[str] = []       # list of layer_codes (ROAD activities only)
+    structure_mappings: List[dict] = []  # [{"structure_type": str, "element": str}]
 
 class ElementResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -80,6 +81,8 @@ class ActivityCreate(BaseModel):
     sort_order: int = 0
     work_type_codes: List[str] = []   # junction rows to create
     layer_codes: List[str] = []       # junction rows for ROAD activities
+    structure_type_codes: List[str] = []  # paired positionally with element_codes
+    element_codes: List[str] = []
 
 class ActivityUpdate(BaseModel):
     label: Optional[str] = None
@@ -88,6 +91,8 @@ class ActivityUpdate(BaseModel):
     is_active: Optional[bool] = None
     work_type_codes: Optional[List[str]] = None  # replace all if provided
     layer_codes: Optional[List[str]] = None       # replace all if provided
+    structure_type_codes: Optional[List[str]] = None  # replace all if both provided
+    element_codes: Optional[List[str]] = None
 
 class ElementCreate(BaseModel):
     code: str
