@@ -394,10 +394,10 @@ const MastersPage = () => {
       {/* Add / Edit Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-lg max-h-[90vh] rounded-xl bg-white shadow-xl flex flex-col overflow-hidden">
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between px-6 pt-6 pb-5 flex-shrink-0">
               <h3 className="text-lg font-semibold text-gray-900">
                 {editItem ? `Edit ${activeTab.slice(0, -1)}` : `Add ${activeTab.slice(0, -1)}`}
               </h3>
@@ -410,6 +410,7 @@ const MastersPage = () => {
             </div>
 
             {/* Fields */}
+            <div className="overflow-y-auto px-6 flex-1">
             <div className="space-y-4">
 
               {/* Code */}
@@ -712,9 +713,10 @@ const MastersPage = () => {
               </div>
 
             </div>
+            </div>{/* end scrollable body */}
 
             {/* Footer */}
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="flex justify-end gap-3 px-6 py-5 border-t border-gray-100 flex-shrink-0">
               <button
                 onClick={closeModal}
                 className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium
