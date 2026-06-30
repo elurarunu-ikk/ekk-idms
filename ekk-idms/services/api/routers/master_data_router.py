@@ -149,7 +149,7 @@ def update_layer(
 # ── ACTIVITIES ────────────────────────────────────────────────────────────────
 
 def _enrich_activity(activity: MasterActivity, db: Session) -> ActivityResponse:
-    """Add work_types and layers lists to an activity response."""
+    """Add work_types, layers, and structure_mappings lists to an activity response."""
     work_types = [
         r.work_type_code for r in
         db.query(MasterActivityWorkType)
@@ -160,9 +160,19 @@ def _enrich_activity(activity: MasterActivity, db: Session) -> ActivityResponse:
         db.query(MasterActivityLayer)
         .filter(MasterActivityLayer.activity_code == activity.code).all()
     ]
+    structure_rows = (
+        db.query(MasterStructureElementActivity)
+        .filter(MasterStructureElementActivity.activity_code == activity.code)
+        .all()
+    )
+    structure_mappings = [
+        {"structure_type": r.structure_type_code, "element": r.element_code}
+        for r in structure_rows
+    ]
     resp = ActivityResponse.model_validate(activity)
     resp.work_types = work_types
     resp.layers = layers
+    resp.structure_mappings = structure_mappings
     return resp
 
 
@@ -228,6 +238,17 @@ def create_activity(
         db.add(MasterActivityWorkType(activity_code=obj.code, work_type_code=wt.upper()))
     for lc in payload.layer_codes:
         db.add(MasterActivityLayer(activity_code=obj.code, layer_code=lc.upper()))
+    for st_code, el_code in zip(payload.structure_type_codes, payload.element_codes):
+        existing_count = db.query(MasterStructureElementActivity).filter(
+            MasterStructureElementActivity.structure_type_code == st_code.upper(),
+            MasterStructureElementActivity.element_code == el_code.upper(),
+        ).count()
+        db.add(MasterStructureElementActivity(
+            structure_type_code=st_code.upper(),
+            element_code=el_code.upper(),
+            activity_code=obj.code,
+            sort_order=existing_count + 1,
+        ))
 
     db.commit()
     db.refresh(obj)
@@ -264,6 +285,22 @@ def update_activity(
         ).delete()
         for lc in payload.layer_codes:
             db.add(MasterActivityLayer(activity_code=obj.code, layer_code=lc.upper()))
+
+    if payload.structure_type_codes is not None and payload.element_codes is not None:
+        db.query(MasterStructureElementActivity).filter(
+            MasterStructureElementActivity.activity_code == obj.code
+        ).delete()
+        for st_code, el_code in zip(payload.structure_type_codes, payload.element_codes):
+            existing_count = db.query(MasterStructureElementActivity).filter(
+                MasterStructureElementActivity.structure_type_code == st_code.upper(),
+                MasterStructureElementActivity.element_code == el_code.upper(),
+            ).count()
+            db.add(MasterStructureElementActivity(
+                structure_type_code=st_code.upper(),
+                element_code=el_code.upper(),
+                activity_code=obj.code,
+                sort_order=existing_count + 1,
+            ))
 
     db.commit()
     db.refresh(obj)
