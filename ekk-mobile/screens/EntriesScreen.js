@@ -402,6 +402,7 @@ export default function EntriesScreen() {
       length_m: prefLength != null ? String(prefLength) : (chainageLength != null ? String(chainageLength) : ''),
       width_m: prefWidth != null ? String(prefWidth) : '',
       depth_m: prefDepth != null ? String(prefDepth) : '',
+      count: item.payload.count != null ? String(item.payload.count) : '1',
       quantity: item.payload.quantity != null ? String(item.payload.quantity) : (item.payload.quantity_lm != null ? String(item.payload.quantity_lm) : ''),
       unit: prefUnit,
       weather_code: item.payload.weather_code || '',
@@ -543,10 +544,11 @@ export default function EntriesScreen() {
     const lengthM = parseOptionalNumber(editForm.length_m) ?? chainageLengthM;
     const widthM = parseOptionalNumber(editForm.width_m);
     const depthM = parseOptionalNumber(editForm.depth_m);
+    const countVal = parseOptionalNumber(editForm.count) ?? 1;
     const manualQty = parseOptionalNumber(editForm.quantity);
     let finalQty = manualQty ?? chainageLengthM ?? parseOptionalNumber(editItem.payload.quantity_lm);
     if (lengthM != null && widthM != null && depthM != null) {
-      finalQty = Number((lengthM * widthM * depthM).toFixed(3));
+      finalQty = Number((lengthM * widthM * depthM * countVal).toFixed(3));
     }
 
     const updated = {
@@ -566,6 +568,7 @@ export default function EntriesScreen() {
       length_m: lengthM,
       width_m: widthM,
       depth_m: depthM,
+      count: countVal,
       quantity: finalQty,
       unit: editForm.unit || null,
       weather_code: editForm.weather_code || null,
@@ -617,8 +620,9 @@ export default function EntriesScreen() {
         // Recalculate quantity with new length
         const w = parseOptionalNumber(next.width_m);
         const d = parseOptionalNumber(next.depth_m);
+        const c = parseOptionalNumber(next.count) ?? 1;
         if (w != null && d != null) {
-          next.quantity = String(Number((chainageLengthM * w * d).toFixed(3)));
+          next.quantity = String(Number((chainageLengthM * w * d * c).toFixed(3)));
         } else {
           next.quantity = String(chainageLengthM);
         }
@@ -636,8 +640,9 @@ export default function EntriesScreen() {
       const l = parseOptionalNumber(next.length_m) ?? chainageLengthM;
       const w = parseOptionalNumber(next.width_m);
       const d = parseOptionalNumber(next.depth_m);
+      const c = parseOptionalNumber(next.count) ?? 1;
       if (l != null && w != null && d != null) {
-        next.quantity = String(Number((l * w * d).toFixed(3)));
+        next.quantity = String(Number((l * w * d * c).toFixed(3)));
       } else if (l != null && w == null && d == null) {
         next.quantity = String(l);
       }
@@ -1254,6 +1259,22 @@ export default function EntriesScreen() {
               />
             </View>
           </View>
+
+          {editForm.work_type === 'STRUCTURE' && (
+            <View style={styles.modalRow}>
+              <View style={styles.modalRowItem}>
+                <Text style={styles.modalHelperText}>Count (units)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={editForm.count || '1'}
+                  onChangeText={(v) => onEditDimensionChange('count', v)}
+                  placeholder="1"
+                  placeholderTextColor="#c7c2c2"
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+          )}
 
           <View style={styles.modalField}>
             <Text style={styles.modalLabel}>Unit</Text>
