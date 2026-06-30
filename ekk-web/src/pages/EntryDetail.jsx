@@ -196,6 +196,9 @@ const EntryDetail = () => {
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Length (m)</p><p className="text-sm text-gray-900">{entry.length_m ?? '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Width (m)</p><p className="text-sm text-gray-900">{entry.width_m ?? '-'}</p></div>
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Depth (m)</p><p className="text-sm text-gray-900">{entry.depth_m ?? '-'}</p></div>
+          {entry.count > 1 && (
+            <div className={fieldRowClass}><p className="text-xs text-gray-500">Count</p><p className="text-sm text-gray-900">{entry.count}</p></div>
+          )}
           <div className={fieldRowClass}><p className="text-xs text-gray-500">Thickness (mm)</p><p className="text-sm text-gray-900">{entry.thickness_mm ?? '-'}</p></div>
         </div>
 
