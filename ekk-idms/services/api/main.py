@@ -128,14 +128,16 @@ def app_version():
     Update minimum_version and force_update when a new APK is released.
     """
     return {
-        "minimum_version": "0.3.1",
-        "latest_version": "0.3.1",
+        "minimum_version": "0.3.2",
+        "latest_version": "0.3.2",
         "force_update": True,
         "message": (
             "A new version of EKK IDMS is available.\n\n"
-            "Please download and install v0.3.1 to continue using the app."
+            "Please download and install v0.3.2 to continue using the app.\n\n"
+            "This update adds Structure Activity selection and a Count "
+            "field for repeating elements (piers, walls, etc.)."
         ),
-        "download_url": "https://idms.ikkuips.co.in/downloads/ekk-idms-v0.3.1.apk",
+        "download_url": "https://idms.ikkuips.co.in/downloads/ekk-idms-v0.3.2.apk",
     }
 
 @app.get("/", tags=["System"])

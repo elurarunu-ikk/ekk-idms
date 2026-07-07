@@ -27,15 +27,16 @@ import {
 
 // ── Cache keys ──────────────────────────────────────────────────────────────
 const CACHE_KEYS = {
-  workTypes:          'masters_work_types',
-  layers:             'masters_layers',
-  elements:           'masters_elements',
-  structureTypes:     'masters_structure_types',
-  activities:         'masters_activities',
-  materials:          'masters_materials',
-  equipment:          'masters_equipment',
-  manpowerCategories: 'masters_manpower_categories',
-  timestamp:          'masters_cache_timestamp',
+  workTypes:           'masters_work_types',
+  layers:              'masters_layers',
+  elements:            'masters_elements',
+  structureTypes:      'masters_structure_types',
+  activities:          'masters_activities',
+  structureActivities: 'masters_structure_activities',
+  materials:           'masters_materials',
+  equipment:           'masters_equipment',
+  manpowerCategories:  'masters_manpower_categories',
+  timestamp:           'masters_cache_timestamp',
 };
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -54,15 +55,16 @@ async function isCacheValid() {
 async function saveToCache(data) {
   try {
     await AsyncStorage.multiSet([
-      [CACHE_KEYS.workTypes,          JSON.stringify(data.workTypes)],
-      [CACHE_KEYS.layers,             JSON.stringify(data.layers)],
-      [CACHE_KEYS.elements,           JSON.stringify(data.elements)],
-      [CACHE_KEYS.structureTypes,     JSON.stringify(data.structureTypes)],
-      [CACHE_KEYS.activities,         JSON.stringify(data.activities)],
-      [CACHE_KEYS.materials,          JSON.stringify(data.materials)],
-      [CACHE_KEYS.equipment,          JSON.stringify(data.equipment)],
-      [CACHE_KEYS.manpowerCategories, JSON.stringify(data.manpowerCategories)],
-      [CACHE_KEYS.timestamp,          String(Date.now())],
+      [CACHE_KEYS.workTypes,           JSON.stringify(data.workTypes)],
+      [CACHE_KEYS.layers,              JSON.stringify(data.layers)],
+      [CACHE_KEYS.elements,            JSON.stringify(data.elements)],
+      [CACHE_KEYS.structureTypes,      JSON.stringify(data.structureTypes)],
+      [CACHE_KEYS.activities,          JSON.stringify(data.activities)],
+      [CACHE_KEYS.structureActivities, JSON.stringify(data.structureActivities)],
+      [CACHE_KEYS.materials,           JSON.stringify(data.materials)],
+      [CACHE_KEYS.equipment,           JSON.stringify(data.equipment)],
+      [CACHE_KEYS.manpowerCategories,  JSON.stringify(data.manpowerCategories)],
+      [CACHE_KEYS.timestamp,           String(Date.now())],
     ]);
   } catch (e) {
     console.warn('[masters] Cache write failed:', e.message);
@@ -77,6 +79,7 @@ async function loadFromCache() {
       CACHE_KEYS.elements,
       CACHE_KEYS.structureTypes,
       CACHE_KEYS.activities,
+      CACHE_KEYS.structureActivities,
       CACHE_KEYS.materials,
       CACHE_KEYS.equipment,
       CACHE_KEYS.manpowerCategories,
@@ -87,14 +90,15 @@ async function loadFromCache() {
     if (Object.values(map).some(v => !v)) return null;
 
     return {
-      workTypes:          map[CACHE_KEYS.workTypes],
-      layers:             map[CACHE_KEYS.layers],
-      elements:           map[CACHE_KEYS.elements],
-      structureTypes:     map[CACHE_KEYS.structureTypes],
-      activities:         map[CACHE_KEYS.activities],
-      materials:          map[CACHE_KEYS.materials],
-      equipment:          map[CACHE_KEYS.equipment],
-      manpowerCategories: map[CACHE_KEYS.manpowerCategories],
+      workTypes:           map[CACHE_KEYS.workTypes],
+      layers:              map[CACHE_KEYS.layers],
+      elements:            map[CACHE_KEYS.elements],
+      structureTypes:      map[CACHE_KEYS.structureTypes],
+      activities:          map[CACHE_KEYS.activities],
+      structureActivities: map[CACHE_KEYS.structureActivities],
+      materials:           map[CACHE_KEYS.materials],
+      equipment:           map[CACHE_KEYS.equipment],
+      manpowerCategories:  map[CACHE_KEYS.manpowerCategories],
     };
   } catch {
     return null;
@@ -104,17 +108,20 @@ async function loadFromCache() {
 // ── Fetch from API ───────────────────────────────────────────────────────────
 async function fetchFromAPI() {
   const [workTypes, layers, elements, structureTypes, activities,
+         structureActivities,
          materials, equipment, manpowerCategories] = await Promise.all([
     api.get('/api/masters/work-types').then(r => r.data),
     api.get('/api/masters/layers', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/elements', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/structure-types', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/activities', { params: { active_only: true } }).then(r => r.data),
+    api.get('/api/masters/structure-activities').then(r => r.data),  // no params = bulk fetch
     api.get('/api/masters/materials', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/equipment', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/manpower-categories', { params: { active_only: true } }).then(r => r.data),
   ]);
   return { workTypes, layers, elements, structureTypes, activities,
+           structureActivities,
            materials, equipment, manpowerCategories };
 }
 
@@ -173,6 +180,9 @@ function getFallback() {
       work_types:   a.workTypes || [],
       layers:       FALLBACK_LAYER_MAP[a.code] || [],
     })),
+    // Empty in pure fallback mode — getStructureActivitiesForSelection falls back
+    // to FALLBACK_SEA_MAP internally when this array is empty
+    structureActivities: [],
     materials:          FALLBACK_MATERIALS,
     equipment:          FALLBACK_EQUIPMENT,
     manpowerCategories: FALLBACK_MANPOWER,
@@ -269,14 +279,24 @@ export function getStructureElementsForType(masters, structureType) {
 
 /**
  * getStructureActivitiesForSelection(masters, structureType, elementCode)
- * Uses FALLBACK_SEA_MAP for structure→element→activity codes, then looks
- * them up in masters.activities. Offline-safe — no per-selection API call.
+ * Filters the pre-cached structureActivities bulk table — no per-selection
+ * API call needed. Falls back to FALLBACK_SEA_MAP only if the cached table
+ * is absent entirely (very old cache or genuine fetch failure).
  */
 export function getStructureActivitiesForSelection(masters, structureType, elementCode) {
-  if (!structureType || !elementCode || !masters?.activities) return [];
+  if (!structureType || !elementCode) return [];
+
+  if (masters?.structureActivities?.length) {
+    return masters.structureActivities
+      .filter(r => r.structure_type === structureType && r.element === elementCode)
+      .map(r => ({ code: r.code, label: r.label, default_unit: r.default_unit }));
+  }
+
+  // Genuine fallback — structureActivities missing from cache entirely
+  console.warn('[masters] structureActivities not cached, using FALLBACK_SEA_MAP');
   const activityCodes = FALLBACK_SEA_MAP[structureType]?.[elementCode] || [];
   return activityCodes
-    .map(code => masters.activities.find(a => a.code === code))
+    .map(code => masters?.activities?.find(a => a.code === code))
     .filter(Boolean);
 }
 

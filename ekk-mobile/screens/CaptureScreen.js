@@ -231,6 +231,7 @@ export default function CaptureScreen() {
     length_m:        '',
     width_m:         '',
     depth_m:         '',
+    count:           '1',
     quantity:        '',
     unit:            '',
     weather_code:    '',
@@ -354,6 +355,7 @@ export default function CaptureScreen() {
     const tm = toNumberOrNull(form.chainage_to_m);
     const width = toNumberOrNull(form.width_m);
     const depth = toNumberOrNull(form.depth_m);
+    const count = toNumberOrNull(form.count) ?? 1;
     const manualQty = toNumberOrNull(form.quantity);
     const explicitLength = toNumberOrNull(form.length_m);
 
@@ -378,7 +380,7 @@ export default function CaptureScreen() {
     }
 
     if (finalLength != null && width != null && depth != null) {
-      setQuantity(Number((finalLength * width * depth).toFixed(3)));
+      setQuantity(Number((finalLength * width * depth * count).toFixed(3)));
       return;
     }
 
@@ -396,6 +398,7 @@ export default function CaptureScreen() {
     form.length_m,
     form.width_m,
     form.depth_m,
+    form.count,
     form.quantity,
   ]);
 
@@ -764,6 +767,7 @@ export default function CaptureScreen() {
     const numericLength = toNumberOrNull(form.length_m);
     const numericWidth = toNumberOrNull(form.width_m);
     const numericDepth = toNumberOrNull(form.depth_m);
+    const numericCount = toNumberOrNull(form.count) ?? 1;
     const derivedLength =
       typeof cf === 'number' && typeof ct === 'number' && ct > cf
         ? Math.round((ct - cf) * 1000)
@@ -786,6 +790,7 @@ export default function CaptureScreen() {
       length_m:        finalLength,
       width_m:         numericWidth,
       depth_m:         numericDepth,
+      count:           numericCount,
       unit:            finalUnit,
       weather_code:    form.weather_code || null,
       progress_status: form.progress_status || null,
@@ -936,7 +941,7 @@ export default function CaptureScreen() {
       project_id: selectedProject?.id || '', work_type: '', structure_type: '', layer_code: '', element_code: '', activity_code: '', stage: '',
       chainage_from_km: '', chainage_from_m: '', chainage_to_km: '', chainage_to_m: '',
       chainage_from: '', chainage_to: '', road_side: '',
-      length_m: '', width_m: '', depth_m: '', quantity: '', unit: '', weather_code: '', progress_status: '', materials: [],
+      length_m: '', width_m: '', depth_m: '', count: '1', quantity: '', unit: '', weather_code: '', progress_status: '', materials: [],
       contractor_name: 'Self', rfi_number: '', layer_section: '', remarks: '',
     });
     setEntryDate(new Date());
@@ -1402,6 +1407,21 @@ export default function CaptureScreen() {
           <TextInput style={[styles.input, styles.compactInput]} value={form.depth_m} onChangeText={v => update('depth_m', v)} placeholder="0.2" placeholderTextColor="#c7c2c2" keyboardType="decimal-pad" />
         </View>
       </View>
+
+      {form.work_type === 'STRUCTURE' && (
+        <View style={styles.compactCol}>
+          <Text style={styles.compactHint}>Count (units)</Text>
+          <TextInput
+            style={[styles.input, styles.compactInput]}
+            value={form.count}
+            onChangeText={v => update('count', v)}
+            placeholder="1"
+            placeholderTextColor="#c7c2c2"
+            keyboardType="decimal-pad"
+          />
+          <Text style={styles.compactHint}>No. of repeating units (piers, walls…)</Text>
+        </View>
+      )}
 
       <View style={styles.twoColCompact}>
         <View style={styles.compactCol}>

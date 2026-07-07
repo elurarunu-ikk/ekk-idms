@@ -26,6 +26,7 @@ class SiteDataTransaction(Base):
     length_m         = Column(Numeric(12, 3))
     width_m          = Column(Numeric(12, 3))
     depth_m          = Column(Numeric(12, 3))
+    count            = Column(Integer, nullable=False, server_default='1')
     cost             = Column(Numeric(14, 2))
     payment_qualifies = Column(Boolean, default=False)
     approved         = Column(Boolean, default=False)

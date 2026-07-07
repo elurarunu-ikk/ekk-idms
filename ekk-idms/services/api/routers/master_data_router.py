@@ -425,31 +425,50 @@ def update_structure_type(
 
 @router.get("/structure-activities")
 def get_structure_activities(
-    structure_type: str = Query(...),
-    element: str = Query(...),
+    structure_type: Optional[str] = Query(None),
+    element: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """
-    Get activities valid for a specific structure type + element combination.
-    Used by CaptureForm and mobile when structure type + element are selected.
-    Returns activity objects in sort_order.
+    Get activities for a structure_type + element combination, OR
+    (when both omitted) return the full mapping table for client-side
+    caching — used by mobile's bulk masters fetch on app load.
     """
-    rows = (
+    q = (
         db.query(MasterStructureElementActivity, MasterActivity)
         .join(MasterActivity,
               MasterStructureElementActivity.activity_code == MasterActivity.code)
-        .filter(
-            MasterStructureElementActivity.structure_type_code == structure_type.upper(),
-            MasterStructureElementActivity.element_code == element.upper(),
-            MasterActivity.is_active == True,
-        )
-        .order_by(MasterStructureElementActivity.sort_order)
-        .all()
+        .filter(MasterActivity.is_active == True)
     )
+    if structure_type:
+        q = q.filter(MasterStructureElementActivity.structure_type_code == structure_type.upper())
+    if element:
+        q = q.filter(MasterStructureElementActivity.element_code == element.upper())
+
+    rows = q.order_by(
+        MasterStructureElementActivity.structure_type_code,
+        MasterStructureElementActivity.element_code,
+        MasterStructureElementActivity.sort_order,
+    ).all()
+
+    if structure_type and element:
+        # Scoped lookup — original shape, backward compatible
+        return [
+            {"code": act.code, "label": act.label, "default_unit": act.default_unit}
+            for _, act in rows
+        ]
+
+    # Bulk mode — include structure_type/element on each row for client-side lookup
     return [
-        {"code": act.code, "label": act.label, "default_unit": act.default_unit}
-        for _, act in rows
+        {
+            "structure_type": m.structure_type_code,
+            "element": m.element_code,
+            "code": act.code,
+            "label": act.label,
+            "default_unit": act.default_unit,
+        }
+        for m, act in rows
     ]
 
 
