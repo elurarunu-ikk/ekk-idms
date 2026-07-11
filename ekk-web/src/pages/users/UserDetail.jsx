@@ -173,9 +173,23 @@ const UserDetail = () => {
 
 const fmt = (val) => (val !== null && val !== undefined && val !== '') ? String(val) : '—';
 
+const toUTC = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    // Replace space separator with T (PostgreSQL format → ISO 8601)
+    let iso = val.replace(' ', 'T');
+    // Append Z if no timezone info present
+    if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    return iso;
+  }
+  return val;
+};
+
 const fmtDate = (val) => {
   if (!val) return '—';
-  try { return format(parseISO(val), 'dd MMM yyyy, HH:mm'); } catch { return val; }
+  try { return format(parseISO(toUTC(val)), 'dd MMM yyyy, HH:mm'); } catch { return val; }
 };
 
 const PRIVILEGED_TYPES = ['SUPER_ADMIN', 'SUPER ADMIN', 'ADMIN', 'HO_USER'];
@@ -200,7 +214,7 @@ const ProfileTab = ({ user }) => {
     {
       label: 'Last login',
       value: user.last_login_at
-        ? formatDistanceToNow(parseISO(user.last_login_at), { addSuffix: true })
+        ? formatDistanceToNow(parseISO(toUTC(user.last_login_at)), { addSuffix: true })
         : 'Never',
     },
     { label: 'Expires', value: user.expires_at ? fmtDate(user.expires_at) : '—' },
@@ -465,7 +479,7 @@ const SitesEditPanel = ({ userId, onClose }) => {
 
 const fmtAgo = (val) => {
   if (!val) return null;
-  try { return formatDistanceToNow(parseISO(val), { addSuffix: true }); } catch { return val; }
+  try { return formatDistanceToNow(parseISO(toUTC(val)), { addSuffix: true }); } catch { return val; }
 };
 
 const SessionCard = ({ icon: Icon, title, session, registeredDevice, onResetDevice, onForceLogout, resetting, loggingOut }) => {

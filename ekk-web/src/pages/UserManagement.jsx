@@ -1,6 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+
+const toUTC = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    let iso = val.replace(' ', 'T');
+    if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    return iso;
+  }
+  return val;
+};
 import {
   Search, Plus, Upload, Download, MoreVertical,
   UserCheck, UserX, Copy, Key, Clock, Eye, Pencil, X, Shield,
@@ -99,7 +111,7 @@ const UserTableRow = ({
       </td>
       <td className="px-4 py-3 text-xs text-gray-500">
         {user.last_login_at
-          ? formatDistanceToNow(parseISO(user.last_login_at), { addSuffix: true })
+          ? formatDistanceToNow(parseISO(toUTC(user.last_login_at)), { addSuffix: true })
           : 'Never'}
       </td>
       <td className="px-4 py-3 text-right relative">

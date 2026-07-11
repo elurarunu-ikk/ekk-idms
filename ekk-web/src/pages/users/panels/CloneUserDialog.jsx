@@ -37,6 +37,7 @@ function PasswordRevealModal({ password, userId, onClose }) {
 export default function CloneUserDialog({ sourceUser, onClose, onSuccess }) {
   const [fullName, setFullName] = useState(`${sourceUser.full_name} (Copy)`);
   const [username, setUsername] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [cpw, setCpw]           = useState('');
   const [saving, setSaving]     = useState(false);
@@ -48,11 +49,12 @@ export default function CloneUserDialog({ sourceUser, onClose, onSuccess }) {
 
   async function submit(e) {
     e.preventDefault();
+    if (!email.trim()) { setError('Email is required for the new user'); return; }
     if (password !== cpw) { setError('Passwords do not match'); return; }
     setError(''); setSaving(true);
     try {
       const res = await cloneUser(sourceUser.id, {
-        new_full_name: fullName, new_username: username, new_password: password,
+        new_full_name: fullName, new_username: username, new_email: email, new_password: password,
       });
       if (res.anomalies?.has_errors) { setFindings(res.anomalies.findings); return; }
       setFindings(res.anomalies?.findings || []);
@@ -83,6 +85,12 @@ export default function CloneUserDialog({ sourceUser, onClose, onSuccess }) {
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Username *</label>
             <input value={username} onChange={(e) => setUsername(e.target.value)} required
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Email *</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+              placeholder="user@example.com"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none" />
           </div>
           <div>
