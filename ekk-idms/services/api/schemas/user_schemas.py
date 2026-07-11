@@ -119,6 +119,7 @@ class CloneUserRequest(BaseModel):
     source_user_id: UUID
     new_username:   str = Field(..., min_length=3, max_length=100)
     new_full_name:  str = Field(..., min_length=2, max_length=200)
+    new_email:      str = Field(..., min_length=5, max_length=200)
     new_password:   str = Field(..., min_length=8)
 
 

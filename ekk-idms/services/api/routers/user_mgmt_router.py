@@ -274,6 +274,7 @@ def clone(
         source_user_id=user_id,
         new_username=payload["new_username"],
         new_full_name=payload["new_full_name"],
+        new_email=payload["new_email"],
         new_password=payload["new_password"],
     )
     return clone_user(db, req, current_user)

@@ -16,6 +16,7 @@ from models.user_mgmt_models import (
     UserSiteAssignment, UserType,
 )
 from models.user_session import UserSession
+from models.user_project_access import UserProjectAccess
 from schemas.user_schemas import (
     AnomalyCheckResponse, CloneResultResponse, UserCreateRequest,
     UserResponse,
@@ -170,13 +171,16 @@ def clone_user(db: Session, payload, cloner: User) -> CloneResultResponse:
     if db.query(User).filter(User.username == payload.new_username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
 
+    if db.query(User).filter(User.email == payload.new_email.lower()).first():
+        raise HTTPException(status_code=409, detail="Email already registered. Use a different email address.")
+
     try:
         new_user = User(
             username=payload.new_username,
             full_name=payload.new_full_name,
             user_type=source_user.user_type,
             password_hash=hash_password(payload.new_password),
-            email=None,
+            email=payload.new_email.lower(),
             is_active=True,
         )
         new_user.user_kind       = getattr(source_user, 'user_kind', 'internal')
@@ -193,6 +197,21 @@ def clone_user(db: Session, payload, cloner: User) -> CloneResultResponse:
             db.add(UserSiteAssignment(user_id=new_user.id, site_id=site_id))
         for module_id in source_perms.module_ids:
             db.add(UserModuleAssignment(user_id=new_user.id, module_id=module_id))
+
+        # Clone UserProjectAccess rows — this is the actual enforcement
+        # table (checked by ensure_project_action); without these the
+        # new user gets a blank project list on login.
+        source_access_rows = db.query(UserProjectAccess).filter(
+            UserProjectAccess.user_id == payload.source_user_id,
+            UserProjectAccess.is_active == True,
+        ).all()
+        for row in source_access_rows:
+            db.add(UserProjectAccess(
+                user_id=new_user.id,
+                project_id=row.project_id,
+                permissions_json=row.permissions_json,
+                is_active=True,
+            ))
 
         # Clone form rights
         form_rights_req = [
