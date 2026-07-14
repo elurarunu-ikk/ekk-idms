@@ -59,7 +59,7 @@ const initialForm = {
   layer_code: '', element_code: '', structure_type: '',
   chainage_from: '', chainage_to: '',
   quantity_lm: '', quantity: '', unit: '',
-  length_m: '', width_m: '', depth_m: '',
+  length_m: '', width_m: '', depth_m: '', count: '1',
   contractor_name: '', road_side: 'LHS', rfi_number: '',
   layer_section: '', weather_code: '', progress_status: '',
   entry_date: '', remarks: '',
@@ -297,6 +297,7 @@ const CaptureForm = () => {
           length_m:        entry.length_m ?? '',
           width_m:         entry.width_m ?? '',
           depth_m:         entry.depth_m ?? '',
+          count:           entry.count ?? 1,
           contractor_name: entry.contractor_name || '',
           road_side:       entry.road_side || 'LHS',
           rfi_number:      entry.rfi_number ?? '',
@@ -352,6 +353,29 @@ const CaptureForm = () => {
         setFormData(prev => prev.quantity_lm === qty ? prev : { ...prev, quantity_lm: qty });
     }
   }, [formData.chainage_from, formData.chainage_to, manualQuantity]);
+
+  // ── Auto-derive quantity from L × W × D × Count (STRUCTURE) ──
+  useEffect(() => {
+    if (formData.work_type !== 'STRUCTURE') return;
+    if (manualQuantity) return;
+    const l = Number(formData.length_m);
+    const w = Number(formData.width_m);
+    const d = Number(formData.depth_m);
+    const c = Number(formData.count) || 1;
+    if (l > 0 && w > 0 && d > 0) {
+      const qty = (l * w * d * c).toFixed(3);
+      setFormData(prev =>
+        prev.quantity === qty ? prev : { ...prev, quantity: qty }
+      );
+    }
+  }, [
+    formData.work_type,
+    formData.length_m,
+    formData.width_m,
+    formData.depth_m,
+    formData.count,
+    manualQuantity,
+  ]);
 
   // ── Master data loading ───────────────────────────────────────────────────
 
@@ -499,6 +523,7 @@ const CaptureForm = () => {
       length_m:        n(formData.length_m),
       width_m:         n(formData.width_m),
       depth_m:         n(formData.depth_m),
+      count:           Number(formData.count) || 1,
       contractor_name: s(formData.contractor_name),
       road_side:       formData.road_side || undefined,
       rfi_number:      formData.rfi_number !== '' ? Number(formData.rfi_number) : undefined,
@@ -714,6 +739,25 @@ const CaptureForm = () => {
           <input type="number" step="0.001" value={formData.depth_m}
             onChange={e => updateField('depth_m', e.target.value)} className={inp} />
         </div>
+        {formData.work_type === 'STRUCTURE' && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Count
+            </label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={formData.count}
+              onChange={e => updateField('count', e.target.value)}
+              className={inp}
+              placeholder="1"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              No. of repeating units (piers, walls, etc.)
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ── Site Details ── */}
