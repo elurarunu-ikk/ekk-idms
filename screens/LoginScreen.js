@@ -19,7 +19,7 @@ import { getApiErrorMessage, API_BASE } from '../services/api';
 import Constants from 'expo-constants';
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail]         = useState('admin@ekk.in');
+  const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
   const [showPass, setShowPass]   = useState(false);
   const [loading, setLoading]     = useState(false);
