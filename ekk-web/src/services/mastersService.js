@@ -98,4 +98,24 @@ export const createManpowerCategory = (payload) =>
 export const updateManpowerCategory = (code, payload) =>
   api.put(`/api/masters/manpower-categories/${code}`, payload).then(r => r.data);
 
+// ── Road Sections ─────────────────────────────────────────────────────────────
+export const getRoadSections = (activeOnly = true) =>
+  api.get('/api/masters/road-sections', { params: { active_only: activeOnly } }).then(r => r.data);
+
+export const createRoadSection = (payload) =>
+  api.post('/api/masters/road-sections', payload).then(r => r.data);
+
+export const updateRoadSection = (code, payload) =>
+  api.put(`/api/masters/road-sections/${code}`, payload).then(r => r.data);
+
+// ── Road Sides ────────────────────────────────────────────────────────────────
+export const getRoadSides = (activeOnly = true) =>
+  api.get('/api/masters/road-sides', { params: { active_only: activeOnly } }).then(r => r.data);
+
+export const createRoadSide = (payload) =>
+  api.post('/api/masters/road-sides', payload).then(r => r.data);
+
+export const updateRoadSide = (code, payload) =>
+  api.put(`/api/masters/road-sides/${code}`, payload).then(r => r.data);
+
 export { getApiErrorMessage };

@@ -11,13 +11,15 @@ import {
   getMaterials, createMaterial, updateMaterial,
   getEquipment, createEquipment, updateEquipment,
   getManpowerCategories, createManpowerCategory, updateManpowerCategory,
+  getRoadSections, createRoadSection, updateRoadSection,
+  getRoadSides, createRoadSide, updateRoadSide,
   getApiErrorMessage,
 } from '../services/mastersService';
 
 const SCOPED_WTS = ['ROAD', 'STRUCTURE'];
 
 const TABS = ['Work Types', 'Layers', 'Activities', 'Elements', 'Structure Types',
-              'Materials', 'Equipment', 'Manpower'];
+              'Road Sections', 'Road Sides', 'Materials', 'Equipment', 'Manpower'];
 
 const LAYER_CODES = [
   'EMBANKMENT', 'SUBGRADE', 'GSB', 'CTSB', 'CTB', 'WMM',
@@ -66,6 +68,8 @@ const MastersPage = () => {
       if (activeTab === 'Activities')      data = await getActivities(filterWorkType || null, null, !showInactive);
       if (activeTab === 'Elements')        data = await getElements(!showInactive);
       if (activeTab === 'Structure Types') data = await getStructureTypes(!showInactive);
+      if (activeTab === 'Road Sections')   data = await getRoadSections(!showInactive);
+      if (activeTab === 'Road Sides')      data = await getRoadSides(!showInactive);
       if (activeTab === 'Materials')       data = await getMaterials(!showInactive);
       if (activeTab === 'Equipment')       data = await getEquipment(!showInactive);
       if (activeTab === 'Manpower')        data = await getManpowerCategories(!showInactive);
@@ -114,6 +118,8 @@ const MastersPage = () => {
       if (activeTab === 'Activities')      await updateActivity(item.code, { is_active: newActive });
       if (activeTab === 'Elements')        await updateElement(item.code, { is_active: newActive });
       if (activeTab === 'Structure Types') await updateStructureType(item.code, { is_active: newActive });
+      if (activeTab === 'Road Sections')   await updateRoadSection(item.code, { is_active: newActive });
+      if (activeTab === 'Road Sides')      await updateRoadSide(item.code, { is_active: newActive });
       if (activeTab === 'Materials')       await updateMaterial(item.code, { is_active: newActive });
       if (activeTab === 'Equipment')       await updateEquipment(item.code, { is_active: newActive });
       if (activeTab === 'Manpower')        await updateManpowerCategory(item.code, { is_active: newActive });
@@ -170,6 +176,18 @@ const MastersPage = () => {
         const payload = { label: form.label, sort_order: Number(form.sort_order) };
         if (isEdit) await updateStructureType(editItem.code, payload);
         else await createStructureType({ code: form.code.toUpperCase(), ...payload });
+      }
+
+      if (activeTab === 'Road Sections') {
+        const payload = { label: form.label, sort_order: Number(form.sort_order) };
+        if (isEdit) await updateRoadSection(editItem.code, payload);
+        else await createRoadSection({ code: form.code.toUpperCase(), ...payload });
+      }
+
+      if (activeTab === 'Road Sides') {
+        const payload = { label: form.label, sort_order: Number(form.sort_order) };
+        if (isEdit) await updateRoadSide(editItem.code, payload);
+        else await createRoadSide({ code: form.code.toUpperCase(), ...payload });
       }
 
       if (activeTab === 'Materials') {

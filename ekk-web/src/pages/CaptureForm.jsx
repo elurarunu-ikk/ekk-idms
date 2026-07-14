@@ -10,11 +10,10 @@ import {
 import {
   getWorkTypes, getLayers, getActivities,
   getElements, getStructureTypes, getStructureActivities,
+  getRoadSections, getRoadSides,
 } from '../services/mastersService';
 
 // ── Local constants (not in captureUtils) ────────────────────────────────────
-
-const ROAD_SIDES = ['LHS', 'RHS', 'Both', 'Median'];
 
 const WEATHER_OPTIONS = [
   { value: '',       label: '— Select —' },
@@ -260,6 +259,8 @@ const CaptureForm = () => {
   const [masterStructTypes, setMasterStructTypes] = useState([]);
   const [masterElements,    setMasterElements]    = useState([]);
   const [masterActivities,  setMasterActivities]  = useState([]);
+  const [roadSections,      setRoadSections]      = useState([]);
+  const [roadSides,         setRoadSides]         = useState([]);
   const [mastersLoading,    setMastersLoading]    = useState(true);
 
   // ── Project pre-fill ──────────────────────────────────────────────────────
@@ -383,14 +384,18 @@ const CaptureForm = () => {
   useEffect(() => {
     const loadStaticMasters = async () => {
       try {
-        const [wts, lyrs, stts] = await Promise.all([
+        const [wts, lyrs, stts, rsData, rsdData] = await Promise.all([
           getWorkTypes(true),
           getLayers(null, true),
           getStructureTypes(true),
+          getRoadSections(),
+          getRoadSides(),
         ]);
         setMasterWorkTypes(wts);
         setMasterLayers(lyrs);
         setMasterStructTypes(stts);
+        setRoadSections(rsData);
+        setRoadSides(rsdData);
       } catch (err) {
         console.warn('Failed to load master work types/layers:', err.message);
       } finally {
@@ -688,13 +693,20 @@ const CaptureForm = () => {
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Road Side</label>
           <select value={formData.road_side} onChange={e => updateField('road_side', e.target.value)} className={sel}>
-            {ROAD_SIDES.map(s => <option key={s} value={s}>{s}</option>)}
+            {roadSides.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Layer Section</label>
-          <input type="text" value={formData.layer_section}
-            onChange={e => updateField('layer_section', e.target.value)} className={inp} />
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Road Section
+          </label>
+          <select value={formData.layer_section}
+                  onChange={e => updateField('layer_section', e.target.value)}
+                  className={sel}>
+            <option value="">— Select —</option>
+            {roadSections.map(s =>
+              <option key={s.code} value={s.code}>{s.label}</option>)}
+          </select>
         </div>
       </div>
 
