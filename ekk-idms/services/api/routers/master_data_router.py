@@ -14,6 +14,7 @@ from models.master_data import (
     MasterActivityWorkType, MasterActivityLayer,
     MasterElement, MasterStructureType, MasterStructureElementActivity,
     MasterMaterial, MasterEquipment, MasterManpowerCategory,
+    MasterRoadSection, MasterRoadSide,
 )
 from models.user import User
 from schemas.master_data import (
@@ -25,6 +26,8 @@ from schemas.master_data import (
     MaterialResponse, MaterialCreate, MaterialUpdate,
     EquipmentResponse, EquipmentCreate, EquipmentUpdate,
     ManpowerCategoryResponse, ManpowerCategoryCreate, ManpowerCategoryUpdate,
+    RoadSectionResponse, RoadSectionCreate, RoadSectionUpdate,
+    RoadSideResponse, RoadSideCreate, RoadSideUpdate,
 )
 
 router = APIRouter()
@@ -633,6 +636,112 @@ def update_manpower_category(
     ).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Manpower category not found")
+    for field, val in payload.model_dump(exclude_none=True).items():
+        setattr(obj, field, val)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+# ── ROAD SECTIONS ─────────────────────────────────────────────────────────────
+
+@router.get("/road-sections", response_model=List[RoadSectionResponse])
+def list_road_sections(
+    active_only: bool = Query(True),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    q = db.query(MasterRoadSection)
+    if active_only:
+        q = q.filter(MasterRoadSection.is_active == True)
+    return q.order_by(MasterRoadSection.sort_order).all()
+
+
+@router.post("/road-sections", response_model=RoadSectionResponse)
+def create_road_section(
+    payload: RoadSectionCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_admin(user)
+    existing = db.query(MasterRoadSection).filter(
+        MasterRoadSection.code == payload.code.upper()
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Road section '{payload.code}' already exists")
+    obj = MasterRoadSection(
+        code=payload.code.upper(), label=payload.label,
+        sort_order=payload.sort_order,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/road-sections/{code}", response_model=RoadSectionResponse)
+def update_road_section(
+    code: str, payload: RoadSectionUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_admin(user)
+    obj = db.query(MasterRoadSection).filter(MasterRoadSection.code == code.upper()).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Road section not found")
+    for field, val in payload.model_dump(exclude_none=True).items():
+        setattr(obj, field, val)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+# ── ROAD SIDES ────────────────────────────────────────────────────────────────
+
+@router.get("/road-sides", response_model=List[RoadSideResponse])
+def list_road_sides(
+    active_only: bool = Query(True),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    q = db.query(MasterRoadSide)
+    if active_only:
+        q = q.filter(MasterRoadSide.is_active == True)
+    return q.order_by(MasterRoadSide.sort_order).all()
+
+
+@router.post("/road-sides", response_model=RoadSideResponse)
+def create_road_side(
+    payload: RoadSideCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_admin(user)
+    existing = db.query(MasterRoadSide).filter(
+        MasterRoadSide.code == payload.code.upper()
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Road side '{payload.code}' already exists")
+    obj = MasterRoadSide(
+        code=payload.code.upper(), label=payload.label,
+        sort_order=payload.sort_order,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/road-sides/{code}", response_model=RoadSideResponse)
+def update_road_side(
+    code: str, payload: RoadSideUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    require_admin(user)
+    obj = db.query(MasterRoadSide).filter(MasterRoadSide.code == code.upper()).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Road side not found")
     for field, val in payload.model_dump(exclude_none=True).items():
         setattr(obj, field, val)
     db.commit()

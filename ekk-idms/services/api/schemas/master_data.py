@@ -206,3 +206,43 @@ class ManpowerCategoryUpdate(BaseModel):
     label: Optional[str] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
+
+# ── Road Sections ───────────────────────────────────────────────────────────────
+
+class RoadSectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    code: str
+    label: str
+    sort_order: int
+    is_active: bool
+
+class RoadSectionCreate(BaseModel):
+    code: str
+    label: str
+    sort_order: int = 0
+
+class RoadSectionUpdate(BaseModel):
+    label: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+# ── Road Sides ───────────────────────────────────────────────────────────────────
+
+class RoadSideResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    code: str
+    label: str
+    sort_order: int
+    is_active: bool
+
+class RoadSideCreate(BaseModel):
+    code: str
+    label: str
+    sort_order: int = 0
+
+class RoadSideUpdate(BaseModel):
+    label: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
