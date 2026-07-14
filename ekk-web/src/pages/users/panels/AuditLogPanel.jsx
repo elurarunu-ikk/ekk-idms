@@ -5,6 +5,19 @@ import { getUserAuditLog, getApiErrorMessage } from '../../../services/apiServic
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 
+const toUTC = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    let iso = val.replace(' ', 'T');
+    if (!iso.endsWith('Z') && !iso.includes('+') &&
+        !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    return iso;
+  }
+  return val;
+};
+
 const CHANGE_TYPE_STYLES = {
   created:            'bg-green-100 text-green-700',
   role_changed:       'bg-violet-100 text-violet-700',
@@ -104,7 +117,7 @@ const AuditLogPanel = ({ userId }) => {
                 </span>
                 <span className="text-xs text-gray-400">·</span>
                 <span className="text-xs text-gray-400">
-                  {formatDistanceToNow(parseISO(entry.changed_at), { addSuffix: true })}
+                  {formatDistanceToNow(parseISO(toUTC(entry.changed_at)), { addSuffix: true })}
                 </span>
               </div>
               {(entry.old_value || entry.new_value) && (

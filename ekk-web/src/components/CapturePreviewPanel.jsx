@@ -13,6 +13,19 @@ import {
   getAgeLabel,
 } from '../utils/captureUtils';
 
+const toUTC = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    let iso = val.replace(' ', 'T');
+    if (!iso.endsWith('Z') && !iso.includes('+') &&
+        !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    return iso;
+  }
+  return val;
+};
+
 /**
  * Right-side slide-over panel showing a capture entry summary.
  *
@@ -127,7 +140,7 @@ const CapturePreviewPanel = ({ entry, onClose, onOpenFull, footerActions }) => {
                 ['RFI No',      entry.rfi_number],
                 ['Entered by',  entry.entered_by],
                 ['Entry date',  entry.entry_date
-                  ? format(parseISO(entry.entry_date), 'dd MMM yyyy')
+                  ? format(parseISO(toUTC(entry.entry_date)), 'dd MMM yyyy')
                   : null],
                 ['Payment',     entry.payment_qualifies ? '✓ Qualifies' : null],
               ].filter(([, v]) => v != null && v !== '').map(([label, value]) => (

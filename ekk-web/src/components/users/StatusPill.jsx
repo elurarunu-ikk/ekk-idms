@@ -1,11 +1,24 @@
 import { addDays, isAfter, parseISO } from 'date-fns';
 
+const toUTC = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    let iso = val.replace(' ', 'T');
+    if (!iso.endsWith('Z') && !iso.includes('+') &&
+        !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    return iso;
+  }
+  return val;
+};
+
 export default function StatusPill({ user }) {
   if (!user) return null;
   const now = new Date();
 
   if (user.expires_at && user.user_kind === 'external') {
-    const expiry = parseISO(user.expires_at);
+    const expiry = parseISO(toUTC(user.expires_at));
     if (!isAfter(expiry, now)) {
       return <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">Expired</span>;
     }
