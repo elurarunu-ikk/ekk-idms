@@ -152,6 +152,38 @@ def expiring_soon(
     return UserListResponse(total=len(items), items=[UserSummaryResponse.model_validate(u) for u in items])
 
 
+@router.get("/mobile-users")
+def list_mobile_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all registered mobile devices with user info and app version. Admin/SuperAdmin only."""
+    if (current_user.user_type or "") not in ("SUPER_ADMIN", "SUPER ADMIN", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    rows = (
+        db.query(RegisteredDevice, User)
+        .join(User, User.id == RegisteredDevice.user_id)
+        .filter(RegisteredDevice.is_active == True)
+        .order_by(RegisteredDevice.last_seen_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "user_id": str(user.id),
+            "full_name": user.full_name,
+            "username": user.username,
+            "user_type": user.user_type,
+            "device_label": device.device_label,
+            "app_version": device.app_version or "unknown",
+            "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
+            "registered_at": device.registered_at.isoformat() if device.registered_at else None,
+        }
+        for device, user in rows
+    ]
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(
     user_id: UUID,

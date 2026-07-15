@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import api from './api';
 import { clearSession, getStoredSession, saveSession } from './session';
 
@@ -147,8 +148,9 @@ async function cacheCredentials(email, password, token) {
 export async function login(email, password) {
   const body = { email, password };
   if (isNative) {
-    body.platform  = 'mobile';
-    body.device_id = await getOrCreateDeviceId();
+    body.platform    = 'mobile';
+    body.device_id   = await getOrCreateDeviceId();
+    body.app_version = Constants.expoConfig?.version || '0.0.0';
   } else {
     body.platform = 'web';
   }

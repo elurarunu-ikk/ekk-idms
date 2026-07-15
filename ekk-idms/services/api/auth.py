@@ -58,6 +58,7 @@ class LoginRequest(BaseModel):
     platform: str = "web"
     device_id: Optional[str] = None
     device_label: Optional[str] = None
+    app_version: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -242,12 +243,18 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
                 user_id=user.id,
                 device_id=req.device_id,
                 device_label=req.device_label,
+                app_version=req.app_version,
+                last_seen_at=datetime.utcnow(),
             ))
         elif registered.device_id != req.device_id:
             raise HTTPException(
                 status_code=403,
                 detail="device_not_recognized: This device is not registered. Please contact your administrator to reset your device.",
             )
+        else:
+            # Update version and last seen on every login
+            registered.app_version = req.app_version
+            registered.last_seen_at = datetime.utcnow()
 
     existing_session = db.query(UserSession).filter(
         UserSession.user_id == user.id,

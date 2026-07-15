@@ -367,6 +367,12 @@ export const getUserDeviceSessions = (id) =>
 export const resetUserDevice = (id) =>
   api.post(`/api/v1/users/${id}/reset-device`).then((r) => r.data);
 
+export const getMobileUsers = () =>
+  api.get('/api/v1/users/mobile-users').then((r) => r.data);
+
+export const getAppVersionInfo = () =>
+  api.get('/app/version').then((r) => r.data);
+
 export const forceLogoutUser = (id, platform = null) =>
   api.post(`/api/v1/users/${id}/force-logout`, null, {
     params: platform ? { platform } : {},

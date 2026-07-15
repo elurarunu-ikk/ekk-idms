@@ -27,3 +27,5 @@ class RegisteredDevice(Base):
     device_label  = Column(String(200), nullable=True)
     registered_at = Column(DateTime, server_default=text("NOW()"))
     is_active     = Column(Boolean, server_default=text("true"))
+    app_version   = Column(String(20), nullable=True)
+    last_seen_at  = Column(DateTime(timezone=True), server_default=text("NOW()"))

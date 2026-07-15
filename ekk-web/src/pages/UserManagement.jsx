@@ -31,6 +31,7 @@ import BulkImportDialog from './users/panels/BulkImportDialog';
 import CloneUserDialog from './users/panels/CloneUserDialog';
 import ResetPasswordDialog from './users/panels/ResetPasswordDialog';
 import TempAccessDialog from './users/panels/TempAccessDialog';
+import MobileUsersTab from './users/panels/MobileUsersTab';
 
 const ALL_MODULES = [
   { id: 'dashboard',  label: 'Dashboard' },
@@ -179,6 +180,7 @@ const UserManagement = () => {
   const currentUserType = localStorage.getItem('user_type') || 'USER';
   const currentUsername = localStorage.getItem('username') || '';
 
+  const [activeTab, setActiveTab] = useState('users');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [userTypeFilter, setUserTypeFilter] = useState('');
@@ -334,6 +336,36 @@ const UserManagement = () => {
         </div>
       </div>
 
+      {/* TABS */}
+      <div className="flex gap-1 border-b border-gray-100">
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`rounded-t-lg border-b-2 px-4 py-2 text-sm font-medium transition-all ${
+            activeTab === 'users'
+              ? 'border-primary-500 text-primary-700 bg-primary-50'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Users
+        </button>
+        <button
+          onClick={() => setActiveTab('mobile')}
+          className={`rounded-t-lg border-b-2 px-4 py-2 text-sm font-medium transition-all ${
+            activeTab === 'mobile'
+              ? 'border-primary-500 text-primary-700 bg-primary-50'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Mobile Users
+        </button>
+      </div>
+
+      {activeTab === 'mobile' ? (
+        <div className="rounded-xl bg-white shadow-card overflow-hidden">
+          <MobileUsersTab />
+        </div>
+      ) : (
+        <>
       {/* ACTIVITY STATS */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard title="Total Users" value={stats.total}    color="gray"   />
@@ -478,6 +510,8 @@ const UserManagement = () => {
           </>
         )}
       </div>
+        </>
+      )}
 
       {/* DIALOGS */}
       <ConfirmModal
