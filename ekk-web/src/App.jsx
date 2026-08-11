@@ -21,6 +21,7 @@ import BOQRegister from './pages/BOQRegister';
 import BOQApprovals from './pages/BOQApprovals';
 import BOQMapping from './pages/BOQMapping';
 
+import BOQQtyActuals from './pages/BOQQtyActuals';
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
 
@@ -60,6 +61,7 @@ const App = () => {
         <Route path="boq" element={<BOQRegister />} />
         <Route path="boq/approvals" element={<BOQApprovals />} />
         <Route path="boq/mapping" element={<BOQMapping />} />
+        <Route path="boq/actuals" element={<BOQQtyActuals />} />
         <Route path="grade-sheet" element={<GradeSheetImport />} />
         <Route path="reference-data" element={<ReferenceDataPage />} />
         <Route path="resources" element={<ResourcesPage />} />

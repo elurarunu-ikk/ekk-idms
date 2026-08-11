@@ -42,6 +42,11 @@ export const createActivityMapping = (payload) =>
 export const deactivateMapping = (mappingId) =>
   api.delete(`/api/boq/activity-mapping/${mappingId}`).then((res) => res.data);
 
+// GET /api/boq/qty-actuals
+export const getBoqQtyActuals = (projectId) =>
+  api.get('/api/boq/qty-actuals', { params: { project_id: projectId } })
+    .then((res) => res.data);
+
 // Load all master data needed by AddMappingModal in one parallel batch
 export const getMasterData = () =>
   Promise.all([
