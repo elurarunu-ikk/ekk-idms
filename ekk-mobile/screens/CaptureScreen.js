@@ -26,7 +26,6 @@ import {
   FALLBACK_EQUIPMENT,
   FALLBACK_MANPOWER,
 } from '../services/masters';
-import { ROAD_SIDES } from '../constants/data';
 
 const MATERIAL_UNITS = ['CUM', 'MT', 'KG', 'BAG', 'NOS', 'LM', 'LTR', 'SQM', 'TON'];
 const SHIFT_TYPES = ['DAY', 'NIGHT'];
@@ -1460,9 +1459,9 @@ export default function CaptureScreen() {
       {/* Road Side */}
       <Text style={styles.label}>Road Side</Text>
       <View style={styles.rsRow}>
-        {ROAD_SIDES.map(rs => (
-          <TouchableOpacity key={rs} style={[styles.rsBtn, form.road_side === rs && styles.rsBtnActive]} onPress={() => update('road_side', rs)}>
-            <Text style={[styles.rsBtnText, form.road_side === rs && styles.rsBtnTextActive]}>{rs}</Text>
+        {(masters?.roadSides ?? []).map(rs => (
+          <TouchableOpacity key={rs.code} style={[styles.rsBtn, form.road_side === rs.code && styles.rsBtnActive]} onPress={() => update('road_side', rs.code)}>
+            <Text style={[styles.rsBtnText, form.road_side === rs.code && styles.rsBtnTextActive]}>{rs.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -1497,17 +1496,27 @@ export default function CaptureScreen() {
       <Text style={styles.label}>Contractor</Text>
       <TextInput style={styles.input} value={form.contractor_name} onChangeText={v => update('contractor_name', v)} placeholder="Self" />
 
-      {/* RFI & Layer */}
+      {/* RFI */}
       <View style={styles.twoCol}>
         <View style={{ flex: 1 }}>
           <Text style={styles.label}>RFI Number</Text>
           <TextInput style={styles.input} value={form.rfi_number} onChangeText={v => update('rfi_number', v)} placeholder="Optional" keyboardType="numeric" />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.label}>Layer / Section</Text>
-          <TextInput style={styles.input} value={form.layer_section} onChangeText={v => update('layer_section', v)} placeholder="L1 / Sec-A" />
-        </View>
       </View>
+
+      {/* Road Section */}
+      <Text style={styles.label}>Road Section</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
+        {(masters?.roadSections ?? []).map((section) => (
+          <TouchableOpacity
+            key={section.code}
+            style={[styles.pill, form.layer_section === section.code && styles.pillActive]}
+            onPress={() => update('layer_section', section.code)}
+          >
+            <Text style={[styles.pillText, form.layer_section === section.code && styles.pillTextActive]}>{section.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {/* Remarks */}
       <Text style={styles.label}>Remarks</Text>

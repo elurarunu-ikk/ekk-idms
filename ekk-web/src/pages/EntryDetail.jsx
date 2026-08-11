@@ -7,6 +7,7 @@ import {
   approveCapture,
   deleteCapture,
   getCapture,
+  getDefaultApiBase,
   getProject,
   listEntryMedia,
   rejectCapture,
@@ -16,7 +17,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import StatusBadge from '../components/StatusBadge';
 
 const fieldRowClass = 'rounded-lg border border-gray-200 bg-gray-50 p-3';
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || getDefaultApiBase()).replace(/\/$/, '');
 
 const EntryDetail = () => {
   const navigate = useNavigate();

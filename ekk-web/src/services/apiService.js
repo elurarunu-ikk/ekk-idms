@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+export const getDefaultApiBase = () =>
+  `${window.location.protocol}//${window.location.hostname}:8000`;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL || getDefaultApiBase(),
 });
 
 export const getApiErrorMessage = (error, fallback = 'Something went wrong') => {

@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, Alert, Linking, AppState } from 'react-native';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import LoginScreen from './screens/LoginScreen';
 import CaptureScreen from './screens/CaptureScreen';
 import EntriesScreen from './screens/EntriesScreen';
@@ -58,6 +59,7 @@ export default function App() {
   const [versionChecked, setVersionChecked] = useState(false);
   const [updateRequired, setUpdateRequired] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
     const checkVersion = async () => {
@@ -119,6 +121,44 @@ export default function App() {
     authEvents.on('unauthorized', handler);
     return () => authEvents.off('unauthorized', handler);
   }, []);
+
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        if (__DEV__) return; // Skip update check in development
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          setUpdateAvailable(true);
+        }
+      } catch (e) {
+        // Silently ignore — network error, offline, etc.
+        console.warn('[updates] Check failed:', e.message);
+      }
+    };
+    checkForUpdates();
+  }, []);
+
+  useEffect(() => {
+    if (!updateAvailable) return;
+    Alert.alert(
+      '🆕 Update Ready',
+      'A new version of EKK IDMS has been downloaded.\n\nTap "Restart Now" to apply the update immediately.',
+      [
+        {
+          text: 'Later',
+          style: 'cancel',
+        },
+        {
+          text: 'Restart Now',
+          onPress: async () => {
+            await Updates.reloadAsync();
+          },
+        },
+      ],
+      { cancelable: false }
+    );
+  }, [updateAvailable]);
 
   return (
     <NavigationContainer ref={navigationRef}>

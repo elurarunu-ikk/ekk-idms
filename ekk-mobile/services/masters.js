@@ -36,6 +36,8 @@ const CACHE_KEYS = {
   materials:           'masters_materials',
   equipment:           'masters_equipment',
   manpowerCategories:  'masters_manpower_categories',
+  roadSections:        'masters_road_sections',
+  roadSides:           'masters_road_sides',
   timestamp:           'masters_cache_timestamp',
 };
 
@@ -64,6 +66,8 @@ async function saveToCache(data) {
       [CACHE_KEYS.materials,           JSON.stringify(data.materials)],
       [CACHE_KEYS.equipment,           JSON.stringify(data.equipment)],
       [CACHE_KEYS.manpowerCategories,  JSON.stringify(data.manpowerCategories)],
+      [CACHE_KEYS.roadSections,        JSON.stringify(data.roadSections)],
+      [CACHE_KEYS.roadSides,           JSON.stringify(data.roadSides)],
       [CACHE_KEYS.timestamp,           String(Date.now())],
     ]);
   } catch (e) {
@@ -83,6 +87,8 @@ async function loadFromCache() {
       CACHE_KEYS.materials,
       CACHE_KEYS.equipment,
       CACHE_KEYS.manpowerCategories,
+      CACHE_KEYS.roadSections,
+      CACHE_KEYS.roadSides,
     ];
     const pairs = await AsyncStorage.multiGet(keys);
     const map = Object.fromEntries(pairs.map(([k, v]) => [k, v ? JSON.parse(v) : null]));
@@ -99,6 +105,8 @@ async function loadFromCache() {
       materials:           map[CACHE_KEYS.materials],
       equipment:           map[CACHE_KEYS.equipment],
       manpowerCategories:  map[CACHE_KEYS.manpowerCategories],
+      roadSections:        map[CACHE_KEYS.roadSections],
+      roadSides:           map[CACHE_KEYS.roadSides],
     };
   } catch {
     return null;
@@ -109,7 +117,8 @@ async function loadFromCache() {
 async function fetchFromAPI() {
   const [workTypes, layers, elements, structureTypes, activities,
          structureActivities,
-         materials, equipment, manpowerCategories] = await Promise.all([
+         materials, equipment, manpowerCategories,
+         roadSections, roadSides] = await Promise.all([
     api.get('/api/masters/work-types').then(r => r.data),
     api.get('/api/masters/layers', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/elements', { params: { active_only: true } }).then(r => r.data),
@@ -119,10 +128,13 @@ async function fetchFromAPI() {
     api.get('/api/masters/materials', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/equipment', { params: { active_only: true } }).then(r => r.data),
     api.get('/api/masters/manpower-categories', { params: { active_only: true } }).then(r => r.data),
+    api.get('/api/masters/road-sections', { params: { active_only: true } }).then(r => r.data),
+    api.get('/api/masters/road-sides',    { params: { active_only: true } }).then(r => r.data),
   ]);
   return { workTypes, layers, elements, structureTypes, activities,
            structureActivities,
-           materials, equipment, manpowerCategories };
+           materials, equipment, manpowerCategories,
+           roadSections, roadSides };
 }
 
 // ── Fallback data ─────────────────────────────────────────────────────────────
@@ -186,6 +198,9 @@ function getFallback() {
     materials:          FALLBACK_MATERIALS,
     equipment:          FALLBACK_EQUIPMENT,
     manpowerCategories: FALLBACK_MANPOWER,
+    // No bundled fallback data for these yet — empty until first successful API fetch
+    roadSections:       [],
+    roadSides:          [],
   };
 }
 
