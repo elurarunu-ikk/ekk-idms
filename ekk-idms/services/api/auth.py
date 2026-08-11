@@ -43,6 +43,7 @@ MODULES = [
     "gradesheet",
     "resources",
     "boq",
+    "boq_mapping",
     "tcs",
 ]
 PRIVILEGED_ROLES = {"SUPER ADMIN", "SUPER_ADMIN"}

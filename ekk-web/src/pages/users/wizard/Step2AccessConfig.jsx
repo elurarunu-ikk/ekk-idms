@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart2, Camera, CheckSquare, ChevronDown, ChevronUp,
   Compass, Database, FileText, Home, Layers, Map,
-  MessageSquare, Settings, Upload, Users,
+  MessageSquare, Settings, Upload, Users, FileSpreadsheet, Ruler,
 } from 'lucide-react';
 import { useWizardStore } from '../../../store/wizardStore';
 import { listActiveProjects, listModules } from '../../../services/apiService';
@@ -16,6 +16,7 @@ const MODULE_ICONS = {
   approvals: CheckSquare, report: BarChart2, chat: MessageSquare,
   projects: Compass, users: Users, companies: Layers,
   resources: Settings, masters: Database, gradesheet: Upload, refdata: Map,
+  boq: FileSpreadsheet, tcs: Ruler, boq_mapping: Map,
 };
 
 const FALLBACK_MODULES = [
@@ -32,6 +33,10 @@ const FALLBACK_MODULES = [
   { id: 'masters',    name: 'Masters',          description: 'Work types, layers, activities' },
   { id: 'gradesheet', name: 'Grade Sheet',      description: 'Level register import' },
   { id: 'refdata',    name: 'Reference Data',   description: 'OGL and reference data' },
+  { id: 'boq',        name: 'BOQ Register',     description: 'BOQ versioning and qty tracking' },
+  { id: 'boq_mapping', name: 'BOQ Mapping',
+    description: 'DPR to BOQ activity mapping setup (admin only)' },
+  { id: 'tcs',        name: 'TCS',              description: 'Typical cross section management' },
 ];
 
 const ACTIONS = ['view', 'add', 'edit', 'delete', 'approve'];

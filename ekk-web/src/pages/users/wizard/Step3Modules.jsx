@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart2, Camera, CheckSquare, Compass, FileText,
   Home, Layers, MessageSquare, Settings, Users,
-  Database, Upload, Map,
+  Database, Upload, Map, FileSpreadsheet, Ruler,
 } from 'lucide-react';
 import { useWizardStore } from '../../../store/wizardStore';
 import { listModules } from '../../../services/apiService';
@@ -13,6 +13,7 @@ const MODULE_ICONS = {
   approvals: CheckSquare, report: BarChart2, chat: MessageSquare,
   projects: Compass, users: Users, companies: Layers,
   resources: Settings, masters: Database, gradesheet: Upload, refdata: Map,
+  boq: FileSpreadsheet, tcs: Ruler, boq_mapping: Map,
 };
 
 const AUTO_MODULE_TYPES = ['SUPER_ADMIN', 'SUPER ADMIN', 'SITE_ADMIN'];
@@ -32,6 +33,11 @@ const FALLBACK_MODULES = [
   { id: 'masters',    name: 'Masters',         description: 'Work types, layers, activities', form_count: 1 },
   { id: 'gradesheet', name: 'Grade Sheet',     description: 'Level register import',          form_count: 1 },
   { id: 'refdata',    name: 'Reference Data',  description: 'OGL and reference data',         form_count: 1 },
+  { id: 'boq',        name: 'BOQ Register',    description: 'BOQ versioning and qty tracking', form_count: 3 },
+  { id: 'boq_mapping', name: 'BOQ Mapping',
+    description: 'DPR to BOQ activity mapping setup (admin only)',
+    form_count: 2 },
+  { id: 'tcs',        name: 'TCS',             description: 'Typical cross section management', form_count: 1 },
 ];
 
 export default function Step3Modules() {

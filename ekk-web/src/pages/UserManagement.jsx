@@ -47,6 +47,9 @@ const ALL_MODULES = [
   { id: 'masters',    label: 'Masters' },
   { id: 'gradesheet', label: 'Grade Sheet' },
   { id: 'refdata',    label: 'Reference Data' },
+  { id: 'boq',        label: 'BOQ Register' },
+  { id: 'boq_mapping', label: 'BOQ Mapping' },
+  { id: 'tcs',        label: 'TCS' },
 ];
 
 const ALL_FORM_RIGHTS = [

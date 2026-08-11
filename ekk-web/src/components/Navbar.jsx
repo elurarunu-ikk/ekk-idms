@@ -59,7 +59,7 @@ const NAV_ITEMS = [
 
 const PROJECT_DATA_ITEMS = [
   { to: '/boq',            label: 'BOQ Register',   icon: 'report',     permission: 'boq' },
-  { to: '/boq/mapping',    label: 'BOQ Mapping',    icon: 'report',     permission: 'boq' },
+  { to: '/boq/mapping',    label: 'BOQ Mapping',    icon: 'report',     permission: 'boq_mapping' },
   { to: '/grade-sheet',    label: 'Grade Sheet',    icon: 'gradesheet', permission: 'gradesheet' },
   { to: '/reference-data', label: 'Reference Data', icon: 'refdata',    permission: 'refdata' },
   { to: '/tcs',            label: 'TCS',            icon: 'report',     permission: 'tcs' },
